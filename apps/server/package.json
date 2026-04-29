@@ -1,23 +1,16 @@
 {
-  "name": "@t-bridge/cli",
+  "name": "@t-bridge/server",
   "version": "0.1.0",
   "private": true,
-  "description": "T-Bridge command line client.",
+  "description": "T-Bridge local relay server.",
   "type": "module",
-  "bin": {
-    "tbridge": "./dist/main.js"
-  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev:connect": "tsx src/main.ts connect 123-456",
-    "dev:local": "tsx src/main.ts local",
-    "dev:share": "tsx src/main.ts share --code 123-456",
+    "dev": "tsx src/main.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@t-bridge/protocol": "0.1.0",
-    "commander": "^14.0.2",
-    "node-pty": "^1.1.0",
     "ws": "^8.18.3"
   },
   "devDependencies": {

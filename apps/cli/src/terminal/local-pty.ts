@@ -1,6 +1,7 @@
 import os from "node:os";
 import process from "node:process";
 import pty from "node-pty";
+import { getDefaultShell } from "./platform.js";
 
 export type LocalPtyOptions = {
   shell?: string;
@@ -13,7 +14,7 @@ export async function runLocalPty(options: LocalPtyOptions): Promise<void> {
     throw new Error("local PTY mode requires an interactive terminal");
   }
 
-  const shell = options.shell ?? getDefaultShell();
+  const shell = getDefaultShell(options.shell);
   const cols = process.stdout.columns || 80;
   const rows = process.stdout.rows || 24;
   let isExiting = false;
@@ -85,16 +86,4 @@ export async function runLocalPty(options: LocalPtyOptions): Promise<void> {
   });
 
   process.once("SIGTERM", exit);
-}
-
-function getDefaultShell(): string {
-  if (process.env.SHELL) {
-    return process.env.SHELL;
-  }
-
-  if (os.platform() === "win32") {
-    return process.env.ComSpec || "powershell.exe";
-  }
-
-  return "/bin/sh";
 }

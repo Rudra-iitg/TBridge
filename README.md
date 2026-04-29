@@ -19,6 +19,17 @@ The first implementation target is a TypeScript monorepo with:
 - [Graphify workflow](./docs/graphify.md)
 - [MVP roadmap](./docs/mvp-roadmap.md)
 
+## Phases
+
+- Phase 0: planning, architecture, security boundaries, and Graphify workflow.
+- Phase 1: local PTY prototype with live stdin/stdout streaming.
+- Phase 2: local WebSocket relay connecting host and guest CLI processes.
+- Phase 3: pairing codes, approval flow hardening, and session lifecycle.
+- Phase 4: local permissions with allow/deny/trusted users.
+- Phase 5: user login, device identity, and Postgres/Redis-backed metadata.
+- Phase 6: hardening with end-to-end encryption, reconnects, rate limits, and
+  deeper cross-platform testing.
+
 ## Proposed Commands
 
 ```bash
@@ -30,6 +41,29 @@ tbridge deny <user-id>
 tbridge sessions
 tbridge revoke <session-id>
 ```
+
+## Phase 2 Local Relay Prototype
+
+Start the relay:
+
+```bash
+npm run dev:relay
+```
+
+In another terminal, share a shell:
+
+```bash
+npm run dev:share
+```
+
+In a third terminal, connect as the guest:
+
+```bash
+npm run dev:connect
+```
+
+The host must approve before the guest receives a remote PTY. Output streams
+continuously as the host shell produces it.
 
 ## Initial Principle
 

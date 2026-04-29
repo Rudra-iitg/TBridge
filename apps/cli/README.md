@@ -16,3 +16,25 @@ Controls:
 - `Ctrl+C`: forwarded to the shell
 
 The goal is to prove terminal streaming behavior before adding the relay server.
+
+## Phase 2 Relay Prototype
+
+Start the local relay:
+
+```bash
+npm run dev:relay
+```
+
+Share a shell:
+
+```bash
+npm run dev:share
+```
+
+Connect as a guest:
+
+```bash
+npm run dev:connect
+```
+
+The default dev share code is `123-456`.

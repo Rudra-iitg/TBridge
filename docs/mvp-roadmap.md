@@ -40,17 +40,27 @@ Success criteria:
 
 Goal: connect two CLI processes over a local server.
 
-- Create Fastify server with WebSocket support.
+Current commands:
+
+```bash
+npm run dev:relay
+npm run dev:share
+npm run dev:connect
+```
+
+- Create a local Node.js WebSocket relay server.
 - Add session rooms.
 - Add JSON protocol messages.
 - Connect host CLI and guest CLI.
 - Stream PTY input/output through the server.
 - Avoid command-level buffering; relay PTY output chunks immediately.
+- Require host approval before the guest receives the remote PTY.
 
 Success criteria:
 
 - Guest can type into host PTY.
 - Host PTY output appears on guest terminal while commands are still running.
+- Host can reject a pending local relay guest.
 - Either side can terminate the session.
 
 ## Phase 3: Pairing And Approval

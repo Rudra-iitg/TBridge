@@ -9,10 +9,13 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspace @t-bridge/cli",
+    "build": "npm run build --workspace @t-bridge/protocol && npm run build --workspace @t-bridge/cli && npm run build --workspace @t-bridge/server",
+    "dev:relay": "npm run dev --workspace @t-bridge/server",
     "dev:local": "npm run dev:local --workspace @t-bridge/cli",
+    "dev:share": "npm run dev:share --workspace @t-bridge/cli",
+    "dev:connect": "npm run dev:connect --workspace @t-bridge/cli",
     "postinstall": "node scripts/fix-node-pty-permissions.mjs",
-    "typecheck": "npm run typecheck --workspace @t-bridge/cli"
+    "typecheck": "npm run typecheck --workspace @t-bridge/protocol && npm run typecheck --workspace @t-bridge/cli && npm run typecheck --workspace @t-bridge/server"
   },
   "engines": {
     "node": ">=20"
