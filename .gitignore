@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+graphify-out/
+
+.env
+.env.*
+!.env.example

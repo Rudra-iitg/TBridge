@@ -1,0 +1,27 @@
+{
+  "name": "@t-bridge/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "T-Bridge command line client.",
+  "type": "module",
+  "bin": {
+    "tbridge": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev:local": "tsx src/main.ts local",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "commander": "^14.0.2",
+    "node-pty": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

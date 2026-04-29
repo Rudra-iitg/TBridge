@@ -1,0 +1,20 @@
+{
+  "name": "t-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Secure remote terminal sharing CLI.",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @t-bridge/cli",
+    "dev:local": "npm run dev:local --workspace @t-bridge/cli",
+    "postinstall": "node scripts/fix-node-pty-permissions.mjs",
+    "typecheck": "npm run typecheck --workspace @t-bridge/cli"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
