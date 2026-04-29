@@ -22,6 +22,7 @@ export async function shareTerminal(
   const shell = getDefaultShell(options.shell);
   const socket = new WebSocket(options.serverUrl);
   let child: IPty | undefined;
+  let isClosed = false;
 
   socket.on("open", () => {
     socket.send(encodeMessage({ type: "REGISTER_HOST", code }));
@@ -33,7 +34,7 @@ export async function shareTerminal(
     switch (message.type) {
       case "HOST_REGISTERED":
         process.stdout.write(
-          `T-Bridge share code: ${message.code}\nWaiting for guest on ${options.serverUrl}\n`
+          `T-Bridge share code: ${message.code}\nWaiting for guest on ${options.serverUrl}\nCodes expire if no guest connects in time.\n`
         );
         return;
       case "ACCESS_REQUEST":
@@ -73,6 +74,11 @@ export async function shareTerminal(
   });
 
   socket.on("close", () => {
+    if (isClosed) {
+      return;
+    }
+
+    isClosed = true;
     child?.kill();
   });
 

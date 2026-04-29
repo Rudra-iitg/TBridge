@@ -22,6 +22,29 @@ export async function connectToShare(
 
   const socket = new WebSocket(options.serverUrl);
   let isRaw = false;
+  let isClosed = false;
+  const onInput = (data: Buffer) => {
+    if (data.toString("utf8") === EXIT_SEQUENCE) {
+      socket.send(
+        encodeMessage({
+          type: "SESSION_TERMINATE",
+          reason: "guest detached"
+        })
+      );
+      socket.close();
+      return;
+    }
+
+    socket.send(
+      encodeMessage({
+        type: "PTY_INPUT",
+        data: data.toString("binary")
+      })
+    );
+  };
+  const onResize = () => {
+    sendResize(socket);
+  };
 
   socket.on("open", () => {
     socket.send(
@@ -36,7 +59,7 @@ export async function connectToShare(
     switch (message.type) {
       case "SESSION_READY":
         process.stdout.write("\x1b[36mRemote session ready\x1b[0m\r\n");
-        enableRawInput(socket);
+        enableRawInput(onInput);
         isRaw = true;
         sendResize(socket);
         return;
@@ -65,7 +88,14 @@ export async function connectToShare(
   });
 
   socket.on("close", () => {
+    if (isClosed) {
+      return;
+    }
+
+    isClosed = true;
     if (isRaw) {
+      process.stdin.off("data", onInput);
+      process.stdout.off("resize", onResize);
       process.stdin.setRawMode(false);
       process.stdin.pause();
     }
@@ -75,33 +105,13 @@ export async function connectToShare(
     process.stderr.write(`Relay connection error: ${error.message}\n`);
   });
 
-  process.stdout.on("resize", () => {
-    sendResize(socket);
-  });
+  process.stdout.on("resize", onResize);
 }
 
-function enableRawInput(socket: WebSocket): void {
+function enableRawInput(onInput: (data: Buffer) => void): void {
   process.stdin.setRawMode(true);
   process.stdin.resume();
-  process.stdin.on("data", (data: Buffer) => {
-    if (data.toString("utf8") === EXIT_SEQUENCE) {
-      socket.send(
-        encodeMessage({
-          type: "SESSION_TERMINATE",
-          reason: "guest detached"
-        })
-      );
-      socket.close();
-      return;
-    }
-
-    socket.send(
-      encodeMessage({
-        type: "PTY_INPUT",
-        data: data.toString("binary")
-      })
-    );
-  });
+  process.stdin.on("data", onInput);
 }
 
 function sendResize(socket: WebSocket): void {

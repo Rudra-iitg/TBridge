@@ -1,5 +1,4 @@
 import http from "node:http";
-import crypto from "node:crypto";
 import { WebSocket, WebSocketServer } from "ws";
 import {
   decodeMessage,
@@ -7,26 +6,26 @@ import {
   type ClientMessage,
   type ServerMessage
 } from "@t-bridge/protocol";
-
-type RelayPeer = {
-  socket: WebSocket;
-  role: "host" | "guest";
-};
-
-type RelayRoom = {
-  code: string;
-  sessionId?: string;
-  host: RelayPeer;
-  guest?: RelayPeer;
-};
+import { SessionManager } from "./session-manager.js";
 
 const port = Number(process.env.PORT ?? 8787);
 const host = process.env.HOST ?? "127.0.0.1";
-const roomsByCode = new Map<string, RelayRoom>();
-const roomsBySocket = new Map<WebSocket, RelayRoom>();
+const codeTtlMs = Number(process.env.CODE_TTL_MS ?? 5 * 60 * 1000);
+const sessions = new SessionManager(codeTtlMs);
 
 const server = http.createServer();
 const wss = new WebSocketServer({ server });
+
+const expirySweep = setInterval(() => {
+  for (const room of sessions.expireRooms()) {
+    send(room.host.socket, {
+      type: "ERROR",
+      message: "share code expired before a guest connected"
+    });
+    room.host.socket.close();
+    room.guest?.socket.close();
+  }
+}, Math.min(codeTtlMs, 30_000));
 
 wss.on("connection", (socket) => {
   socket.on("message", (data) => {
@@ -48,7 +47,13 @@ wss.on("connection", (socket) => {
 });
 
 server.listen(port, host, () => {
-  process.stdout.write(`T-Bridge relay listening on ws://${host}:${port}\n`);
+  process.stdout.write(
+    `T-Bridge relay listening on ws://${host}:${port} (code TTL ${codeTtlMs}ms)\n`
+  );
+});
+
+server.on("close", () => {
+  clearInterval(expirySweep);
 });
 
 function handleMessage(socket: WebSocket, message: ClientMessage): void {
@@ -78,118 +83,85 @@ function handleMessage(socket: WebSocket, message: ClientMessage): void {
 }
 
 function registerHost(socket: WebSocket, code: string): void {
-  if (!code) {
-    send(socket, { type: "ERROR", message: "share code is required" });
+  const result = sessions.registerHost(socket, code);
+  if (!result.ok) {
+    send(socket, { type: "ERROR", message: result.message });
     socket.close();
     return;
   }
 
-  if (roomsByCode.has(code)) {
-    send(socket, { type: "ERROR", message: "share code is already active" });
-    socket.close();
-    return;
-  }
-
-  const room: RelayRoom = {
-    code,
-    host: { socket, role: "host" }
-  };
-
-  roomsByCode.set(code, room);
-  roomsBySocket.set(socket, room);
-  send(socket, { type: "HOST_REGISTERED", code });
+  send(socket, { type: "HOST_REGISTERED", code: result.room.code });
 }
 
 function registerGuest(socket: WebSocket, code: string): void {
-  const room = roomsByCode.get(code);
-  if (!room) {
-    send(socket, { type: "ERROR", message: "share code not found" });
+  const result = sessions.registerGuest(socket, code);
+  if (!result.ok) {
+    send(socket, { type: "ERROR", message: result.message });
     socket.close();
     return;
   }
 
-  if (room.guest) {
-    send(socket, { type: "ERROR", message: "share code already has a guest" });
-    socket.close();
-    return;
-  }
-
-  room.guest = { socket, role: "guest" };
-  roomsBySocket.set(socket, room);
-  send(room.host.socket, { type: "ACCESS_REQUEST", code });
+  send(result.room.host.socket, { type: "ACCESS_REQUEST", code });
 }
 
 function approveAccess(socket: WebSocket): void {
-  const room = roomsBySocket.get(socket);
-  if (!room || room.host.socket !== socket || !room.guest) {
-    send(socket, { type: "ERROR", message: "no pending access request" });
+  const result = sessions.approve(socket);
+  if (!result.ok) {
+    send(socket, { type: "ERROR", message: result.message });
     return;
   }
 
-  room.sessionId = crypto.randomUUID();
-  send(room.host.socket, {
+  send(result.room.host.socket, {
     type: "SESSION_READY",
-    sessionId: room.sessionId,
+    sessionId: result.sessionId,
     role: "host"
   });
-  send(room.guest.socket, {
+  send(result.room.guest!.socket, {
     type: "SESSION_READY",
-    sessionId: room.sessionId,
+    sessionId: result.sessionId,
     role: "guest"
   });
 }
 
 function rejectAccess(socket: WebSocket, reason = "host rejected access"): void {
-  const room = roomsBySocket.get(socket);
-  if (!room || room.host.socket !== socket || !room.guest) {
-    send(socket, { type: "ERROR", message: "no pending access request" });
+  const result = sessions.reject(socket);
+  if (!result.ok) {
+    send(socket, { type: "ERROR", message: result.message });
     return;
   }
 
-  send(room.guest.socket, { type: "ACCESS_REJECTED", reason });
-  room.guest.socket.close();
-  room.guest = undefined;
+  send(result.room.guest!.socket, { type: "ACCESS_REJECTED", reason });
+  result.room.guest!.socket.close();
 }
 
 function forwardToPeer(socket: WebSocket, message: ClientMessage): void {
-  const room = roomsBySocket.get(socket);
-  if (!room?.sessionId) {
-    send(socket, { type: "ERROR", message: "session is not ready" });
+  const result = sessions.getPeer(socket);
+  if (!result.ok) {
+    send(socket, { type: "ERROR", message: result.message });
     return;
   }
 
-  const target =
-    socket === room.host.socket ? room.guest?.socket : room.host.socket;
-
-  if (!target || target.readyState !== WebSocket.OPEN) {
-    send(socket, { type: "ERROR", message: "peer is not connected" });
-    return;
-  }
-
-  send(target, message as ServerMessage);
+  send(result.peer, message as ServerMessage);
 }
 
 function closeSocketRoom(socket: WebSocket): void {
-  const room = roomsBySocket.get(socket);
+  const room = sessions.getRoom(socket);
   if (!room) {
     return;
   }
 
-  roomsBySocket.delete(socket);
-
   const peer =
     socket === room.host.socket ? room.guest?.socket : room.host.socket;
+
+  sessions.releaseSocket(socket);
+
   if (peer?.readyState === WebSocket.OPEN) {
     send(peer, { type: "SESSION_TERMINATE", reason: "peer disconnected" });
   }
 
   if (socket === room.host.socket) {
-    roomsByCode.delete(room.code);
     room.guest?.socket.close();
-    return;
   }
-
-  room.guest = undefined;
 }
 
 function send(socket: WebSocket, message: ServerMessage): void {

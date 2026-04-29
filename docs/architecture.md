@@ -152,6 +152,18 @@ The backend must not execute shell commands or store raw terminal traffic.
 11. Either side can pause, detach, or terminate.
 ```
 
+## Relay Session Lifecycle
+
+Local relay sessions currently use these states:
+
+- `waiting`: host registered a code and is waiting for a guest.
+- `pending`: guest requested access and host must approve or reject.
+- `active`: host approved and PTY traffic can flow.
+- `ended`: peer disconnected, code expired, or session was rejected/closed.
+
+Share codes are short-lived. The relay consumes a code when the session becomes
+active, so a later guest cannot reuse it.
+
 ## Protocol Events
 
 ```ts

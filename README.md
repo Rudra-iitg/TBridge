@@ -42,7 +42,7 @@ tbridge sessions
 tbridge revoke <session-id>
 ```
 
-## Phase 2 Local Relay Prototype
+## Local Relay Prototype
 
 Start the relay:
 
@@ -63,7 +63,8 @@ npm run dev:connect
 ```
 
 The host must approve before the guest receives a remote PTY. Output streams
-continuously as the host shell produces it.
+continuously as the host shell produces it. Share codes are short-lived and are
+consumed when a session becomes active.
 
 ## Initial Principle
 

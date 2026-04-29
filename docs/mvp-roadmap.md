@@ -67,6 +67,13 @@ Success criteria:
 
 Goal: make connection flow resemble the real product.
 
+Current implementation:
+
+- Relay state is managed by a dedicated `SessionManager`.
+- Share codes have a configurable TTL through `CODE_TTL_MS`.
+- Sessions move through `waiting`, `pending`, `active`, and `ended` states.
+- Approved codes are consumed so they cannot be reused.
+
 - `tbridge share` creates short-lived code.
 - `tbridge connect <code>` requests access.
 - Host sees approval prompt.
@@ -78,6 +85,7 @@ Success criteria:
 - No shell starts before host approval.
 - Expired or reused codes fail.
 - Session lifecycle is visible in logs.
+- Guest disconnect and host disconnect both cleanly notify the peer.
 
 ## Phase 4: Local Permissions
 
