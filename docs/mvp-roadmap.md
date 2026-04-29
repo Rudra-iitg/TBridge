@@ -91,6 +91,16 @@ Success criteria:
 
 Goal: add basic trust controls.
 
+Current implementation:
+
+- Local policy is stored at `~/.tbridge/policy.json`.
+- `tbridge allow <user-id>` marks a requester as trusted.
+- `tbridge deny <user-id>` blocks a requester.
+- `tbridge forget <user-id>` removes a local policy override.
+- `tbridge policy` prints the local policy file.
+- `tbridge connect <code> --user <id>` sends a temporary requester ID until
+  Phase 5 adds real login/device identity.
+
 - Add local policy file.
 - Add `allow`, `deny`, and `sessions` commands.
 - Add blocked-user rejection.

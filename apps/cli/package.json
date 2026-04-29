@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev:connect": "tsx src/main.ts connect 123-456",
+    "dev:connect": "tsx src/main.ts connect 123-456 --user dev-guest",
     "dev:local": "tsx src/main.ts local",
     "dev:share": "tsx src/main.ts share --code 123-456",
     "typecheck": "tsc -p tsconfig.json --noEmit"

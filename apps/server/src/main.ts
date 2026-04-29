@@ -62,7 +62,7 @@ function handleMessage(socket: WebSocket, message: ClientMessage): void {
       registerHost(socket, message.code);
       return;
     case "REGISTER_GUEST":
-      registerGuest(socket, message.code);
+      registerGuest(socket, message.code, message.requesterId);
       return;
     case "ACCESS_APPROVED":
       approveAccess(socket);
@@ -93,15 +93,15 @@ function registerHost(socket: WebSocket, code: string): void {
   send(socket, { type: "HOST_REGISTERED", code: result.room.code });
 }
 
-function registerGuest(socket: WebSocket, code: string): void {
-  const result = sessions.registerGuest(socket, code);
+function registerGuest(socket: WebSocket, code: string, requesterId: string): void {
+  const result = sessions.registerGuest(socket, code, requesterId);
   if (!result.ok) {
     send(socket, { type: "ERROR", message: result.message });
     socket.close();
     return;
   }
 
-  send(result.room.host.socket, { type: "ACCESS_REQUEST", code });
+  send(result.room.host.socket, { type: "ACCESS_REQUEST", code, requesterId });
 }
 
 function approveAccess(socket: WebSocket): void {

@@ -7,6 +7,7 @@ export type RelayState = "waiting" | "pending" | "active" | "ended";
 export type RelayPeer = {
   socket: WebSocket;
   role: RelayRole;
+  requesterId?: string;
 };
 
 export type RelayRoom = {
@@ -65,7 +66,12 @@ export class SessionManager {
     return { ok: true, room };
   }
 
-  registerGuest(socket: WebSocket, code: string, now = Date.now()): RegisterGuestResult {
+  registerGuest(
+    socket: WebSocket,
+    code: string,
+    requesterId: string,
+    now = Date.now()
+  ): RegisterGuestResult {
     this.expireRooms(now);
 
     const room = this.roomsByCode.get(code);
@@ -77,7 +83,7 @@ export class SessionManager {
       return { ok: false, message: `share code is ${room.state}` };
     }
 
-    room.guest = { socket, role: "guest" };
+    room.guest = { socket, role: "guest", requesterId };
     room.state = "pending";
     this.roomsBySocket.set(socket, room);
     return { ok: true, room };

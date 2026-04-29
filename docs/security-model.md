@@ -54,6 +54,12 @@ Pairing code rules:
 
 Local policy belongs to the host machine.
 
+The Phase 4 prototype stores this local policy at:
+
+```text
+~/.tbridge/policy.json
+```
+
 ```json
 {
   "defaultPolicy": "ask",
@@ -71,7 +77,6 @@ Local policy belongs to the host machine.
 Supported access modes:
 
 - `ask`: always ask before access.
-- `allow-once`: approve this session only.
 - `trusted`: allow future access while the host is actively sharing.
 - `blocked`: reject immediately.
 

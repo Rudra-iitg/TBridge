@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { connectToShare } from "./terminal/remote-guest.js";
+import {
+  allowUser,
+  denyUser,
+  forgetUser,
+  showPolicy
+} from "./permissions/commands.js";
 import { shareTerminal } from "./terminal/remote-host.js";
 import { runLocalPty } from "./terminal/local-pty.js";
 
@@ -37,11 +43,41 @@ program
   .command("connect <code>")
   .description("Connect to a shared PTY through a T-Bridge relay")
   .option("--server <url>", "relay WebSocket URL", "ws://localhost:8787")
-  .action(async (code: string, options: { server: string }) => {
+  .option("-u, --user <id>", "local requester id")
+  .action(async (code: string, options: { server: string; user?: string }) => {
     await connectToShare({
       code,
+      requesterId: options.user,
       serverUrl: options.server
     });
+  });
+
+program
+  .command("allow <user-id>")
+  .description("Trust a requester for future active shares on this machine")
+  .action(async (userId: string) => {
+    await allowUser(userId);
+  });
+
+program
+  .command("deny <user-id>")
+  .description("Block a requester from using shared terminals on this machine")
+  .action(async (userId: string) => {
+    await denyUser(userId);
+  });
+
+program
+  .command("forget <user-id>")
+  .description("Remove a requester from local allow/deny policy")
+  .action(async (userId: string) => {
+    await forgetUser(userId);
+  });
+
+program
+  .command("policy")
+  .description("Show local terminal sharing policy")
+  .action(async () => {
+    await showPolicy();
   });
 
 program.parseAsync(process.argv).catch((error: unknown) => {

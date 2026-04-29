@@ -2,7 +2,7 @@ export type ClientRole = "host" | "guest";
 
 export type ClientMessage =
   | { type: "REGISTER_HOST"; code: string }
-  | { type: "REGISTER_GUEST"; code: string }
+  | { type: "REGISTER_GUEST"; code: string; requesterId: string }
   | { type: "ACCESS_APPROVED" }
   | { type: "ACCESS_REJECTED"; reason?: string }
   | { type: "PTY_INPUT"; data: string }
@@ -13,7 +13,7 @@ export type ClientMessage =
 
 export type ServerMessage =
   | { type: "HOST_REGISTERED"; code: string }
-  | { type: "ACCESS_REQUEST"; code: string }
+  | { type: "ACCESS_REQUEST"; code: string; requesterId: string }
   | { type: "SESSION_READY"; sessionId: string; role: ClientRole }
   | { type: "ACCESS_REJECTED"; reason: string }
   | { type: "PTY_INPUT"; data: string }

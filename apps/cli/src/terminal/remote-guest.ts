@@ -8,6 +8,7 @@ import {
 
 export type ConnectToShareOptions = {
   code: string;
+  requesterId?: string;
   serverUrl: string;
 };
 
@@ -48,7 +49,11 @@ export async function connectToShare(
 
   socket.on("open", () => {
     socket.send(
-      encodeMessage({ type: "REGISTER_GUEST", code: options.code })
+      encodeMessage({
+        type: "REGISTER_GUEST",
+        code: options.code,
+        requesterId: options.requesterId ?? getDefaultRequesterId()
+      })
     );
     process.stdout.write(`Requesting access for ${options.code}...\n`);
   });
@@ -106,6 +111,10 @@ export async function connectToShare(
   });
 
   process.stdout.on("resize", onResize);
+}
+
+function getDefaultRequesterId(): string {
+  return process.env.TBRIDGE_USER_ID || process.env.USER || "anonymous";
 }
 
 function enableRawInput(onInput: (data: Buffer) => void): void {

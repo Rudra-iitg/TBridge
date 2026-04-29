@@ -38,9 +38,31 @@ tbridge share
 tbridge connect <code-or-user-id>
 tbridge allow <user-id>
 tbridge deny <user-id>
+tbridge forget <user-id>
+tbridge policy
 tbridge sessions
 tbridge revoke <session-id>
 ```
+
+## Local Permissions
+
+Phase 4 stores host-side allow/deny policy at:
+
+```text
+~/.tbridge/policy.json
+```
+
+For the current local relay prototype, requesters identify themselves with
+`--user <id>`:
+
+```bash
+tbridge allow dev-guest
+tbridge deny unknown-user
+tbridge connect 123-456 --user dev-guest
+```
+
+`trusted` users are auto-approved while sharing is active. `blocked` users are
+auto-rejected. Everyone else uses the manual approval prompt.
 
 ## Local Relay Prototype
 

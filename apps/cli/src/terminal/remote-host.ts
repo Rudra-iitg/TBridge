@@ -7,6 +7,7 @@ import {
   encodeMessage,
   type ServerMessage
 } from "@t-bridge/protocol";
+import { decideAccess } from "../permissions/policy.js";
 import { generateShareCode, getDefaultShell } from "./platform.js";
 
 export type ShareTerminalOptions = {
@@ -38,13 +39,14 @@ export async function shareTerminal(
         );
         return;
       case "ACCESS_REQUEST":
-        if (await approveAccess(message.code)) {
+        const approval = await approveAccess(message.code, message.requesterId);
+        if (approval.allowed) {
           socket.send(encodeMessage({ type: "ACCESS_APPROVED" }));
         } else {
           socket.send(
             encodeMessage({
               type: "ACCESS_REJECTED",
-              reason: "host rejected access"
+              reason: approval.reason
             })
           );
         }
@@ -87,7 +89,22 @@ export async function shareTerminal(
   });
 }
 
-async function approveAccess(code: string): Promise<boolean> {
+async function approveAccess(
+  code: string,
+  requesterId: string
+): Promise<{ allowed: boolean; reason: string }> {
+  const decision = await decideAccess(requesterId);
+
+  if (decision.action === "allow") {
+    process.stdout.write(`Auto-approved ${requesterId}: ${decision.reason}\n`);
+    return { allowed: true, reason: decision.reason };
+  }
+
+  if (decision.action === "deny") {
+    process.stdout.write(`Auto-rejected ${requesterId}: ${decision.reason}\n`);
+    return { allowed: false, reason: decision.reason };
+  }
+
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
@@ -95,9 +112,13 @@ async function approveAccess(code: string): Promise<boolean> {
 
   try {
     const answer = await rl.question(
-      `Guest wants to connect with code ${code}. Allow? [y/N] `
+      `Guest ${requesterId} wants to connect with code ${code}. Allow? [y/N] `
     );
-    return answer.trim().toLowerCase() === "y";
+    const allowed = answer.trim().toLowerCase() === "y";
+    return {
+      allowed,
+      reason: allowed ? "host approved access" : "host rejected access"
+    };
   } finally {
     rl.close();
   }
