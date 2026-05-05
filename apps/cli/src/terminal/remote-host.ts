@@ -5,8 +5,13 @@ import WebSocket from "ws";
 import {
   decodeMessage,
   encodeMessage,
+  type PeerIdentity,
   type ServerMessage
 } from "@t-bridge/protocol";
+import {
+  loadOrCreateIdentity,
+  publicIdentity
+} from "../identity/identity-store.js";
 import { decideAccess } from "../permissions/policy.js";
 import { generateShareCode, getDefaultShell } from "./platform.js";
 
@@ -21,12 +26,19 @@ export async function shareTerminal(
 ): Promise<void> {
   const code = options.code ?? generateShareCode();
   const shell = getDefaultShell(options.shell);
+  const identity = await loadOrCreateIdentity();
   const socket = new WebSocket(options.serverUrl);
   let child: IPty | undefined;
   let isClosed = false;
 
   socket.on("open", () => {
-    socket.send(encodeMessage({ type: "REGISTER_HOST", code }));
+    socket.send(
+      encodeMessage({
+        type: "REGISTER_HOST",
+        code,
+        identity: publicIdentity(identity)
+      })
+    );
   });
 
   socket.on("message", async (data) => {
@@ -39,7 +51,7 @@ export async function shareTerminal(
         );
         return;
       case "ACCESS_REQUEST":
-        const approval = await approveAccess(message.code, message.requesterId);
+        const approval = await approveAccess(message.code, message.requester);
         if (approval.allowed) {
           socket.send(encodeMessage({ type: "ACCESS_APPROVED" }));
         } else {
@@ -91,17 +103,21 @@ export async function shareTerminal(
 
 async function approveAccess(
   code: string,
-  requesterId: string
+  requester: PeerIdentity
 ): Promise<{ allowed: boolean; reason: string }> {
-  const decision = await decideAccess(requesterId);
+  const decision = await decideAccess(requester.userId);
 
   if (decision.action === "allow") {
-    process.stdout.write(`Auto-approved ${requesterId}: ${decision.reason}\n`);
+    process.stdout.write(
+      `Auto-approved ${requester.userId} (${requester.deviceName}): ${decision.reason}\n`
+    );
     return { allowed: true, reason: decision.reason };
   }
 
   if (decision.action === "deny") {
-    process.stdout.write(`Auto-rejected ${requesterId}: ${decision.reason}\n`);
+    process.stdout.write(
+      `Auto-rejected ${requester.userId} (${requester.deviceName}): ${decision.reason}\n`
+    );
     return { allowed: false, reason: decision.reason };
   }
 
@@ -112,7 +128,7 @@ async function approveAccess(
 
   try {
     const answer = await rl.question(
-      `Guest ${requesterId} wants to connect with code ${code}. Allow? [y/N] `
+      `Guest ${requester.userId} from ${requester.deviceName} wants to connect with code ${code}. Allow? [y/N] `
     );
     const allowed = answer.trim().toLowerCase() === "y";
     return {

@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { WebSocket } from "ws";
+import type { PeerIdentity } from "@t-bridge/protocol";
 
 export type RelayRole = "host" | "guest";
 export type RelayState = "waiting" | "pending" | "active" | "ended";
@@ -7,7 +8,7 @@ export type RelayState = "waiting" | "pending" | "active" | "ended";
 export type RelayPeer = {
   socket: WebSocket;
   role: RelayRole;
-  requesterId?: string;
+  identity: PeerIdentity;
 };
 
 export type RelayRoom = {
@@ -42,7 +43,12 @@ export class SessionManager {
 
   constructor(private readonly codeTtlMs: number) {}
 
-  registerHost(socket: WebSocket, code: string, now = Date.now()): RegisterHostResult {
+  registerHost(
+    socket: WebSocket,
+    code: string,
+    identity: PeerIdentity,
+    now = Date.now()
+  ): RegisterHostResult {
     this.expireRooms(now);
 
     if (!code) {
@@ -58,7 +64,7 @@ export class SessionManager {
       createdAt: now,
       expiresAt: now + this.codeTtlMs,
       state: "waiting",
-      host: { socket, role: "host" }
+      host: { socket, role: "host", identity }
     };
 
     this.roomsByCode.set(code, room);
@@ -69,7 +75,7 @@ export class SessionManager {
   registerGuest(
     socket: WebSocket,
     code: string,
-    requesterId: string,
+    identity: PeerIdentity,
     now = Date.now()
   ): RegisterGuestResult {
     this.expireRooms(now);
@@ -83,7 +89,7 @@ export class SessionManager {
       return { ok: false, message: `share code is ${room.state}` };
     }
 
-    room.guest = { socket, role: "guest", requesterId };
+    room.guest = { socket, role: "guest", identity };
     room.state = "pending";
     this.roomsBySocket.set(socket, room);
     return { ok: true, room };

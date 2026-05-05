@@ -34,6 +34,8 @@ The first implementation target is a TypeScript monorepo with:
 
 ```bash
 tbridge login
+tbridge identity
+tbridge logout
 tbridge share
 tbridge connect <code-or-user-id>
 tbridge allow <user-id>
@@ -46,14 +48,22 @@ tbridge revoke <session-id>
 
 ## Local Permissions
 
-Phase 4 stores host-side allow/deny policy at:
+T-Bridge stores local identity and host-side allow/deny policy at:
 
 ```text
+~/.tbridge/identity.json
 ~/.tbridge/policy.json
 ```
 
-For the current local relay prototype, requesters identify themselves with
-`--user <id>`:
+Create a local identity:
+
+```bash
+tbridge login --user rudra
+tbridge identity
+```
+
+For the current local relay prototype, `--user <id>` can override the requester
+user ID:
 
 ```bash
 tbridge allow dev-guest

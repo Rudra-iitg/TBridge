@@ -4,6 +4,7 @@ import {
   decodeMessage,
   encodeMessage,
   type ClientMessage,
+  type PeerIdentity,
   type ServerMessage
 } from "@t-bridge/protocol";
 import { SessionManager } from "./session-manager.js";
@@ -59,10 +60,10 @@ server.on("close", () => {
 function handleMessage(socket: WebSocket, message: ClientMessage): void {
   switch (message.type) {
     case "REGISTER_HOST":
-      registerHost(socket, message.code);
+      registerHost(socket, message.code, message.identity);
       return;
     case "REGISTER_GUEST":
-      registerGuest(socket, message.code, message.requesterId);
+      registerGuest(socket, message.code, message.identity);
       return;
     case "ACCESS_APPROVED":
       approveAccess(socket);
@@ -82,8 +83,12 @@ function handleMessage(socket: WebSocket, message: ClientMessage): void {
   }
 }
 
-function registerHost(socket: WebSocket, code: string): void {
-  const result = sessions.registerHost(socket, code);
+function registerHost(
+  socket: WebSocket,
+  code: string,
+  identity: PeerIdentity
+): void {
+  const result = sessions.registerHost(socket, code, identity);
   if (!result.ok) {
     send(socket, { type: "ERROR", message: result.message });
     socket.close();
@@ -93,15 +98,23 @@ function registerHost(socket: WebSocket, code: string): void {
   send(socket, { type: "HOST_REGISTERED", code: result.room.code });
 }
 
-function registerGuest(socket: WebSocket, code: string, requesterId: string): void {
-  const result = sessions.registerGuest(socket, code, requesterId);
+function registerGuest(
+  socket: WebSocket,
+  code: string,
+  identity: PeerIdentity
+): void {
+  const result = sessions.registerGuest(socket, code, identity);
   if (!result.ok) {
     send(socket, { type: "ERROR", message: result.message });
     socket.close();
     return;
   }
 
-  send(result.room.host.socket, { type: "ACCESS_REQUEST", code, requesterId });
+  send(result.room.host.socket, {
+    type: "ACCESS_REQUEST",
+    code,
+    requester: identity
+  });
 }
 
 function approveAccess(socket: WebSocket): void {

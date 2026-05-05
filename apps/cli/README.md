@@ -42,10 +42,13 @@ The default dev share code is `123-456`.
 ## Local Permissions
 
 ```bash
+npm exec --workspace @t-bridge/cli tbridge login --user dev-guest
+npm exec --workspace @t-bridge/cli tbridge identity
 npm run dev:connect
 npm exec --workspace @t-bridge/cli tbridge allow dev-guest
 npm exec --workspace @t-bridge/cli tbridge deny dev-guest
 npm exec --workspace @t-bridge/cli tbridge policy
 ```
 
-The policy file lives at `~/.tbridge/policy.json`.
+The identity file lives at `~/.tbridge/identity.json`. The policy file lives at
+`~/.tbridge/policy.json`.

@@ -122,6 +122,19 @@ t-bridge/
 - Show active session state.
 - Provide detach, pause, terminate, and mode-switch shortcuts.
 
+## Local Identity
+
+The Phase 5 prototype creates a local identity with:
+
+- user ID
+- device ID
+- device name
+- public key
+- private key
+
+The guest sends public identity metadata during relay registration. The host uses
+the requester user ID for local allow/deny decisions.
+
 ## Backend Responsibilities
 
 - User authentication.

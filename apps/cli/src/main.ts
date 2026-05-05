@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import { login, logout, showIdentity } from "./identity/commands.js";
 import { connectToShare } from "./terminal/remote-guest.js";
 import {
   allowUser,
@@ -16,6 +17,32 @@ program
   .name("tbridge")
   .description("T-Bridge secure terminal sharing CLI")
   .version("0.1.0");
+
+program
+  .command("login")
+  .description("Create or replace the local T-Bridge user/device identity")
+  .option("-u, --user <id>", "local user id")
+  .option("-d, --device-name <name>", "local device display name")
+  .action(async (options: { deviceName?: string; user?: string }) => {
+    await login({
+      deviceName: options.deviceName,
+      userId: options.user
+    });
+  });
+
+program
+  .command("identity")
+  .description("Show the local T-Bridge identity without private key material")
+  .action(async () => {
+    await showIdentity();
+  });
+
+program
+  .command("logout")
+  .description("Remove the local T-Bridge identity")
+  .action(async () => {
+    await logout();
+  });
 
 program
   .command("local")
@@ -43,7 +70,7 @@ program
   .command("connect <code>")
   .description("Connect to a shared PTY through a T-Bridge relay")
   .option("--server <url>", "relay WebSocket URL", "ws://localhost:8787")
-  .option("-u, --user <id>", "local requester id")
+  .option("-u, --user <id>", "override local requester user id")
   .action(async (code: string, options: { server: string; user?: string }) => {
     await connectToShare({
       code,

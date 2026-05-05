@@ -5,6 +5,10 @@ import {
   encodeMessage,
   type ServerMessage
 } from "@t-bridge/protocol";
+import {
+  loadOrCreateIdentity,
+  publicIdentity
+} from "../identity/identity-store.js";
 
 export type ConnectToShareOptions = {
   code: string;
@@ -22,6 +26,7 @@ export async function connectToShare(
   }
 
   const socket = new WebSocket(options.serverUrl);
+  const identity = await loadOrCreateIdentity({ userId: options.requesterId });
   let isRaw = false;
   let isClosed = false;
   const onInput = (data: Buffer) => {
@@ -52,10 +57,12 @@ export async function connectToShare(
       encodeMessage({
         type: "REGISTER_GUEST",
         code: options.code,
-        requesterId: options.requesterId ?? getDefaultRequesterId()
+        identity: publicIdentity(identity)
       })
     );
-    process.stdout.write(`Requesting access for ${options.code}...\n`);
+    process.stdout.write(
+      `Requesting access for ${options.code} as ${identity.userId} (${identity.deviceName})...\n`
+    );
   });
 
   socket.on("message", (data) => {
@@ -113,9 +120,6 @@ export async function connectToShare(
   process.stdout.on("resize", onResize);
 }
 
-function getDefaultRequesterId(): string {
-  return process.env.TBRIDGE_USER_ID || process.env.USER || "anonymous";
-}
 
 function enableRawInput(onInput: (data: Buffer) => void): void {
   process.stdin.setRawMode(true);

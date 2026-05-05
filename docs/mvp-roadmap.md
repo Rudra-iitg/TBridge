@@ -116,6 +116,15 @@ Success criteria:
 
 Goal: move from anonymous pairing to user/device identity.
 
+Current implementation:
+
+- `tbridge login` creates a local user/device identity.
+- `tbridge identity` prints the public identity metadata.
+- `tbridge logout` removes the local identity.
+- Identity includes a user ID, device ID, device name, and Ed25519 keypair.
+- Guest registration sends public user/device identity through the relay.
+- Host approval and local policy now use the requester user ID from identity.
+
 - Add user login.
 - Add device registration.
 - Store device public key.
@@ -126,6 +135,13 @@ Success criteria:
 
 - Session records identify both users and devices.
 - Revoked devices cannot connect.
+
+Remaining before production:
+
+- Replace local-only identity with server-backed auth.
+- Store device metadata in Postgres.
+- Add device revocation checks at the relay/API layer.
+- Move private-key storage into OS credential stores.
 
 ## Phase 6: Hardening
 

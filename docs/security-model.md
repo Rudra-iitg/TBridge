@@ -34,6 +34,15 @@ Local secret storage should use the OS credential store when possible:
 - Linux: Secret Service/libsecret
 - Fallback: encrypted local file with a clear warning
 
+The Phase 5 prototype stores identity locally at:
+
+```text
+~/.tbridge/identity.json
+```
+
+This includes private key material for the local prototype. Production should
+move private keys into the OS credential store.
+
 ## Pairing
 
 `tbridge share` creates a short-lived code, for example:
