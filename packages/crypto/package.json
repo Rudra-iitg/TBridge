@@ -1,0 +1,18 @@
+{
+  "name": "@t-bridge/crypto",
+  "version": "0.1.0",
+  "private": true,
+  "description": "End-to-end encryption for T-Bridge terminal sessions.",
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

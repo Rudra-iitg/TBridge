@@ -37,9 +37,14 @@ export type PeerResult =
   | { ok: true; room: RelayRoom; peer: WebSocket }
   | { ok: false; message: string };
 
+export type ReconnectResult =
+  | { ok: true; room: RelayRoom }
+  | { ok: false; message: string };
+
 export class SessionManager {
   private readonly roomsByCode = new Map<string, RelayRoom>();
   private readonly roomsBySocket = new Map<WebSocket, RelayRoom>();
+  private readonly roomsBySessionId = new Map<string, RelayRoom>();
 
   constructor(private readonly codeTtlMs: number) {}
 
@@ -108,6 +113,7 @@ export class SessionManager {
     room.sessionId = crypto.randomUUID();
     room.state = "active";
     this.roomsByCode.delete(room.code);
+    this.roomsBySessionId.set(room.sessionId, room);
     return { ok: true, room, sessionId: room.sessionId };
   }
 
@@ -120,6 +126,44 @@ export class SessionManager {
     room.state = "ended";
     this.roomsByCode.delete(room.code);
     return { ok: true, room, sessionId: room.sessionId ?? "" };
+  }
+
+  /**
+   * Reconnect a peer to an active session during the grace period.
+   * The identity must match the original peer for the corresponding role.
+   */
+  reconnect(
+    socket: WebSocket,
+    sessionId: string,
+    identity: PeerIdentity
+  ): ReconnectResult {
+    const room = this.roomsBySessionId.get(sessionId);
+    if (!room) {
+      return { ok: false, message: "session not found" };
+    }
+
+    if (room.state !== "active") {
+      return { ok: false, message: `session is ${room.state}` };
+    }
+
+    // Match by deviceId to determine which role is reconnecting
+    if (room.host.identity.deviceId === identity.deviceId) {
+      // Remove old socket mapping
+      this.roomsBySocket.delete(room.host.socket);
+      // Update to new socket
+      room.host = { socket, role: "host", identity };
+      this.roomsBySocket.set(socket, room);
+      return { ok: true, room };
+    }
+
+    if (room.guest?.identity.deviceId === identity.deviceId) {
+      this.roomsBySocket.delete(room.guest.socket);
+      room.guest = { socket, role: "guest", identity };
+      this.roomsBySocket.set(socket, room);
+      return { ok: true, room };
+    }
+
+    return { ok: false, message: "identity does not match session peers" };
   }
 
   getPeer(socket: WebSocket): PeerResult {
@@ -157,6 +201,9 @@ export class SessionManager {
     if (socket === room.host.socket) {
       room.state = "ended";
       this.roomsByCode.delete(room.code);
+      if (room.sessionId) {
+        this.roomsBySessionId.delete(room.sessionId);
+      }
       if (room.guest) {
         this.roomsBySocket.delete(room.guest.socket);
       }
@@ -168,6 +215,9 @@ export class SessionManager {
       if (room.state === "pending" || room.state === "active") {
         room.state = "ended";
         this.roomsByCode.delete(room.code);
+        if (room.sessionId) {
+          this.roomsBySessionId.delete(room.sessionId);
+        }
       }
     }
 
@@ -182,6 +232,9 @@ export class SessionManager {
         room.state = "ended";
         this.roomsByCode.delete(room.code);
         this.roomsBySocket.delete(room.host.socket);
+        if (room.sessionId) {
+          this.roomsBySessionId.delete(room.sessionId);
+        }
         if (room.guest) {
           this.roomsBySocket.delete(room.guest.socket);
         }
