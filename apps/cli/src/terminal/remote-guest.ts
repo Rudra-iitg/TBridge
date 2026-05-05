@@ -3,6 +3,7 @@ import WebSocket from "ws";
 import {
   decodeMessage,
   encodeMessage,
+  type PeerIdentity,
   type ServerMessage
 } from "@t-bridge/protocol";
 import {
@@ -15,6 +16,20 @@ import {
   loadOrCreateIdentity,
   publicIdentity
 } from "../identity/identity-store.js";
+import {
+  renderBanner,
+  renderSessionBox,
+  spin,
+  primary,
+  success,
+  error,
+  dim,
+  accent,
+  bold,
+  userTag,
+  icons,
+  type Spinner,
+} from "../ui/index.js";
 
 export type ConnectToShareOptions = {
   code: string;
@@ -36,12 +51,27 @@ export async function connectToShare(
   }
 
   const identity = await loadOrCreateIdentity({ userId: options.requesterId });
+
   let isRaw = false;
   let isClosed = false;
   let sessionId: string | undefined;
   let cipher: SessionCipher | undefined;
   let ephemeral: EphemeralKeyPair | undefined;
   let isStdinPaused = false;
+  let sessionStartMs: number | undefined;
+  let peerIdentity: PeerIdentity | undefined;
+  let activeSpinner: Spinner | undefined;
+
+  // ── Banner ──────────────────────────────────────────────────────
+  process.stderr.write(
+    renderBanner({
+      version: "0.1.0",
+      userId: identity.userId,
+      deviceName: identity.deviceName,
+    })
+  );
+
+  activeSpinner = spin("Connecting to relay…");
 
   const onInput = (data: Buffer) => {
     if (data.toString("utf8") === EXIT_SEQUENCE) {
@@ -92,6 +122,7 @@ export async function connectToShare(
 
     socket.on("open", () => {
       if (isReconnect && sessionId) {
+        activeSpinner = spin("Reconnecting to session…");
         socket.send(
           encodeMessage({
             type: "RECONNECT",
@@ -99,17 +130,16 @@ export async function connectToShare(
             identity: publicIdentity(identity)
           })
         );
-        process.stdout.write("Reconnecting...\n");
       } else {
+        activeSpinner?.succeed("Connected to relay");
+        activeSpinner = spin(`Requesting access for code ${bold(options.code)}…`);
+
         socket.send(
           encodeMessage({
             type: "REGISTER_GUEST",
             code: options.code,
             identity: publicIdentity(identity)
           })
-        );
-        process.stdout.write(
-          `Requesting access for ${options.code} as ${identity.userId} (${identity.deviceName})...\n`
         );
       }
     });
@@ -118,9 +148,12 @@ export async function connectToShare(
       const message = decodeMessage(data) as ServerMessage;
 
       switch (message.type) {
-        case "SESSION_READY":
+        case "SESSION_READY": {
           sessionId = message.sessionId;
-          process.stdout.write("\x1b[36mRemote session ready\x1b[0m\r\n");
+          sessionStartMs = Date.now();
+
+          activeSpinner?.succeed("Access approved");
+          activeSpinner = spin("Establishing E2E encryption…");
 
           // Start E2E key exchange
           ephemeral = generateEphemeralKeyPair();
@@ -135,10 +168,15 @@ export async function connectToShare(
           isRaw = true;
           sendResize(socket);
           return;
-        case "KEY_EXCHANGE":
-          if (!ephemeral) {
-            return;
-          }
+        }
+
+        case "SESSION_INFO": {
+          peerIdentity = message.peerIdentity;
+          return;
+        }
+
+        case "KEY_EXCHANGE": {
+          if (!ephemeral) return;
 
           const peerPublicKey = Buffer.from(
             message.ephemeralPublicKey,
@@ -149,14 +187,28 @@ export async function connectToShare(
             peerPublicKey,
             "guest"
           );
-          process.stdout.write(
-            "\x1b[36mE2E encryption established\x1b[0m\r\n"
-          );
+
+          activeSpinner?.succeed("E2E encryption established");
+
+          // Show connected session box
+          const peerName = peerIdentity?.userId ?? "host";
+          const peerDevice = peerIdentity?.deviceName;
+
+          process.stderr.write("\r\n" + renderSessionBox({
+            state: "connected",
+            peerName,
+            peerColorIndex: 1,
+            encrypted: true,
+            sessionStartMs,
+            deviceName: peerDevice,
+          }) + "\r\n\r\n");
+
+          activeSpinner = undefined;
           return;
-        case "ENCRYPTED_DATA":
-          if (!cipher) {
-            return;
-          }
+        }
+
+        case "ENCRYPTED_DATA": {
+          if (!cipher) return;
 
           try {
             const plaintext = cipher.decrypt({
@@ -164,46 +216,58 @@ export async function connectToShare(
               nonce: message.nonce
             });
             process.stdout.write(plaintext);
-          } catch (error) {
+          } catch (err) {
             process.stderr.write(
-              `Decryption error: ${error instanceof Error ? error.message : String(error)}\r\n`
+              `  ${error("✗")} Decryption error: ${err instanceof Error ? err.message : String(err)}\r\n`
             );
           }
           return;
-        case "ACCESS_REJECTED":
-          process.stderr.write(`Access rejected: ${message.reason}\n`);
+        }
+
+        case "ACCESS_REJECTED": {
+          activeSpinner?.fail(`Access rejected: ${message.reason}`);
           socket.close();
           return;
+        }
+
         case "PTY_OUTPUT":
-          // Unencrypted fallback
           process.stdout.write(message.data);
           return;
-        case "PTY_EXIT":
-          process.stdout.write(
-            `\r\nRemote shell exited (${message.code}).\r\n`
+
+        case "PTY_EXIT": {
+          process.stderr.write(
+            `\r\n  ${dim(icons.dash.repeat(50))}\r\n  ${dim("Remote shell exited")} ${dim(`(${message.code})`)}\r\n\r\n`
           );
           socket.close();
           return;
-        case "SESSION_TERMINATE":
-          process.stdout.write(
-            `\r\nSession ended: ${message.reason ?? "closed"}\r\n`
+        }
+
+        case "SESSION_TERMINATE": {
+          process.stderr.write(
+            `\r\n  ${dim(icons.dash.repeat(50))}\r\n  ${error(icons.cross)} Session ended: ${message.reason ?? "closed"}\r\n\r\n`
           );
           socket.close();
           return;
-        case "RECONNECT_OK":
-          process.stdout.write(
-            "\x1b[36mReconnected to session\x1b[0m\r\n"
-          );
+        }
+
+        case "RECONNECT_OK": {
+          activeSpinner?.succeed("Reconnected to session");
+          activeSpinner = undefined;
+
           if (!isRaw) {
             enableRawInput(onInput);
             isRaw = true;
           }
           sendResize(socket);
           return;
-        case "ERROR":
-          process.stderr.write(`Relay error: ${message.message}\n`);
+        }
+
+        case "ERROR": {
+          activeSpinner?.fail(`Relay error: ${message.message}`);
           socket.close();
           return;
+        }
+
         default:
           return;
       }
@@ -223,9 +287,7 @@ export async function connectToShare(
     socket.on("close", () => {
       clearInterval(drainCheck);
 
-      if (isClosed) {
-        return;
-      }
+      if (isClosed) return;
 
       // If session was active, attempt reconnect
       if (sessionId && !isClosed) {
@@ -237,8 +299,8 @@ export async function connectToShare(
       cleanup();
     });
 
-    socket.on("error", (error) => {
-      process.stderr.write(`Relay connection error: ${error.message}\n`);
+    socket.on("error", (err) => {
+      activeSpinner?.fail(`Connection error: ${err.message}`);
     });
 
     return socket;
@@ -248,27 +310,29 @@ export async function connectToShare(
 
   function attemptReconnect(attempt: number): void {
     if (attempt >= MAX_RECONNECT_ATTEMPTS) {
-      process.stderr.write("Reconnect failed. Closing session.\r\n");
+      process.stderr.write(
+        `  ${error(icons.cross)} Reconnect failed after ${MAX_RECONNECT_ATTEMPTS} attempts\r\n`
+      );
       isClosed = true;
       cleanup();
       return;
     }
 
     const delay = RECONNECT_DELAYS[attempt] ?? 4000;
-    process.stderr.write(
-      `Connection lost. Reconnecting in ${delay}ms (attempt ${attempt + 1}/${MAX_RECONNECT_ATTEMPTS})...\r\n`
+    activeSpinner = spin(
+      `Connection lost. Reconnecting in ${delay}ms (${attempt + 1}/${MAX_RECONNECT_ATTEMPTS})…`
     );
 
     setTimeout(() => {
-      if (isClosed) {
-        return;
-      }
+      if (isClosed) return;
 
+      activeSpinner?.update("Reconnecting…");
       const newSocket = connectSocket(true);
       newSocket.on("open", () => {
         currentSocket = newSocket;
       });
       newSocket.on("error", () => {
+        activeSpinner?.fail("Reconnect attempt failed");
         attemptReconnect(attempt + 1);
       });
     }, delay);
@@ -293,9 +357,7 @@ function enableRawInput(onInput: (data: Buffer) => void): void {
 }
 
 function sendResize(socket: WebSocket): void {
-  if (socket.readyState !== WebSocket.OPEN) {
-    return;
-  }
+  if (socket.readyState !== WebSocket.OPEN) return;
 
   socket.send(
     encodeMessage({

@@ -279,6 +279,16 @@ function approveAccess(socket: WebSocket): void {
     sessionId: result.sessionId,
     role: "guest"
   });
+
+  // Broadcast peer identity so each side can display the other's name/device
+  send(result.room.host.socket, {
+    type: "SESSION_INFO",
+    peerIdentity: result.room.guest!.identity
+  });
+  send(result.room.guest!.socket, {
+    type: "SESSION_INFO",
+    peerIdentity: result.room.host.identity
+  });
 }
 
 function rejectAccess(

@@ -25,6 +25,7 @@ export type ServerMessage =
   | { type: "HOST_REGISTERED"; code: string }
   | { type: "ACCESS_REQUEST"; code: string; requester: PeerIdentity }
   | { type: "SESSION_READY"; sessionId: string; role: ClientRole }
+  | { type: "SESSION_INFO"; peerIdentity: PeerIdentity }
   | { type: "ACCESS_REJECTED"; reason: string }
   | { type: "KEY_EXCHANGE"; ephemeralPublicKey: string }
   | { type: "ENCRYPTED_DATA"; ciphertext: string; nonce: string }
