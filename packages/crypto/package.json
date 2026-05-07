@@ -1,9 +1,10 @@
 {
-  "name": "@t-bridge/crypto",
-  "version": "0.1.0",
+  "name": "@tbridge/crypto",
+  "version": "2.0.0",
   "private": true,
-  "description": "End-to-end encryption for T-Bridge terminal sessions.",
+  "description": "End-to-end encryption for TBridge terminal sessions.",
   "type": "module",
+  "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": "./dist/index.js"

@@ -1,9 +1,12 @@
 {
-  "name": "@tbridge/relay",
+  "name": "@tbridge/app",
   "version": "2.0.0",
   "private": true,
-  "description": "TBridge relay server.",
+  "description": "TBridge — collaborative terminal workspace.",
   "type": "module",
+  "bin": {
+    "tbridge": "./dist/main.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/main.ts",
@@ -11,11 +14,13 @@
   },
   "dependencies": {
     "@tbridge/protocol": "2.0.0",
-    "ws": "^8.18.3"
+    "@tbridge/crypto": "2.0.0",
+    "@tbridge/engine": "2.0.0",
+    "@tbridge/tui": "2.0.0",
+    "node-pty": "^1.1.0"
   },
   "devDependencies": {
     "@types/node": "^24.9.1",
-    "@types/ws": "^8.18.1",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   },

@@ -6,7 +6,7 @@ import {
   type ClientMessage,
   type PeerIdentity,
   type ServerMessage
-} from "@t-bridge/protocol";
+} from "@tbridge/protocol";
 import { log } from "./logger.js";
 import {
   connectionLimiter,

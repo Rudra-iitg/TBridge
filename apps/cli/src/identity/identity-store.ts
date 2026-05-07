@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { PeerIdentity } from "@t-bridge/protocol";
+import type { PeerIdentity } from "@tbridge/protocol";
 import {
   deletePrivateKey,
   loadPrivateKey,

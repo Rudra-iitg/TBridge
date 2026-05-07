@@ -9,13 +9,13 @@ import {
   encodeMessage,
   type PeerIdentity,
   type ServerMessage
-} from "@t-bridge/protocol";
+} from "@tbridge/protocol";
 import {
   createSessionCipher,
   generateEphemeralKeyPair,
   type EphemeralKeyPair,
   type SessionCipher
-} from "@t-bridge/crypto";
+} from "@tbridge/crypto";
 import {
   loadOrCreateIdentity,
   publicIdentity

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type { WebSocket } from "ws";
-import type { PeerIdentity } from "@t-bridge/protocol";
+import type { PeerIdentity } from "@tbridge/protocol";
 
 export type RelayRole = "host" | "guest";
 export type RelayState = "waiting" | "pending" | "active" | "ended";

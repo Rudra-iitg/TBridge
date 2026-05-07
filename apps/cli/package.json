@@ -1,22 +1,19 @@
 {
-  "name": "@t-bridge/cli",
-  "version": "0.1.0",
+  "name": "@tbridge/cli",
+  "version": "2.0.0",
   "private": true,
-  "description": "T-Bridge command line client.",
+  "description": "TBridge legacy CLI (deprecated — use @tbridge/app).",
   "type": "module",
   "bin": {
-    "tbridge": "./dist/main.js"
+    "tbridge-legacy": "./dist/main.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev:connect": "tsx src/main.ts connect 123-456 --user dev-guest",
-    "dev:local": "tsx src/main.ts local",
-    "dev:share": "tsx src/main.ts share --code 123-456",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@t-bridge/crypto": "0.1.0",
-    "@t-bridge/protocol": "0.1.0",
+    "@tbridge/crypto": "2.0.0",
+    "@tbridge/protocol": "2.0.0",
     "commander": "^14.0.2",
     "node-pty": "^1.1.0",
     "ws": "^8.18.3"
