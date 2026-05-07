@@ -9,11 +9,11 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "npm run build --workspace @tbridge/protocol && npm run build --workspace @tbridge/crypto && npm run build --workspace @tbridge/engine && npm run build --workspace @tbridge/tui && npm run build --workspace @tbridge/app",
+    "build": "npm run build --workspace @tbridge/protocol && npm run build --workspace @tbridge/crypto && npm run build --workspace @tbridge/network && npm run build --workspace @tbridge/engine && npm run build --workspace @tbridge/tui && npm run build --workspace @tbridge/app",
     "dev": "npm run dev --workspace @tbridge/app",
     "dev:relay": "npm run dev --workspace @t-bridge/server",
     "test": "vitest run",
-    "typecheck": "npm run typecheck --workspace @tbridge/protocol && npm run typecheck --workspace @tbridge/engine && npm run typecheck --workspace @tbridge/tui && npm run typecheck --workspace @tbridge/app",
+    "typecheck": "npm run typecheck --workspace @tbridge/protocol && npm run typecheck --workspace @tbridge/network && npm run typecheck --workspace @tbridge/engine && npm run typecheck --workspace @tbridge/tui && npm run typecheck --workspace @tbridge/app",
     "postinstall": "node scripts/fix-node-pty-permissions.mjs"
   },
   "engines": {
@@ -24,6 +24,8 @@
     "vitest": "^4.1.5"
   },
   "dependencies": {
-    "node-pty": "^1.2.0-beta.12"
+    "@types/ws": "^8.18.1",
+    "node-pty": "^1.2.0-beta.12",
+    "ws": "^8.20.0"
   }
 }

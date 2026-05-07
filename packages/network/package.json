@@ -1,25 +1,27 @@
 {
-  "name": "@tbridge/engine",
+  "name": "@tbridge/network",
   "version": "2.0.0",
   "private": true,
-  "description": "TBridge execution engine — multi-session PTY management.",
+  "description": "TBridge network layer — WebSocket client and embedded relay.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./relay-worker": "./dist/relay-worker.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@tbridge/crypto": "^2.0.0",
     "@tbridge/protocol": "2.0.0",
-    "@tbridge/network": "2.0.0",
-    "node-pty": "^1.1.0"
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/node": "^24.9.1",
+    "@types/ws": "^8.5.14",
     "typescript": "^5.9.3"
   },
   "engines": {

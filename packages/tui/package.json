@@ -14,8 +14,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@tbridge/protocol": "2.0.0",
-    "@tbridge/engine": "2.0.0"
+    "@tbridge/engine": "2.0.0",
+    "@tbridge/network": "^2.0.0",
+    "@tbridge/protocol": "2.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.9.1",

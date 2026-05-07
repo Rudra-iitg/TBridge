@@ -10,6 +10,7 @@ import { EventEmitter } from "node:events";
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
 import type { SessionInfo, SessionStatus } from "@tbridge/protocol";
+import type { ISession, SessionEvents } from "./types.js";
 
 // node-pty is CJS-only — use createRequire for ESM compat
 const require = createRequire(import.meta.url);
@@ -41,17 +42,9 @@ export type SessionOptions = {
   deviceId: string;
 };
 
-export interface SessionEvents {
-  data: (data: string) => void;
-  exit: (code: number | null, signal: number | null) => void;
-  error: (error: Error) => void;
-  titleChange: (title: string) => void;
-  statusChange: (status: SessionStatus) => void;
-}
-
 // ─── Session ─────────────────────────────────────────────────────
 
-export class Session extends EventEmitter {
+export class Session extends EventEmitter implements ISession {
   public readonly id: string;
   public readonly owner: string;
   public readonly deviceId: string;

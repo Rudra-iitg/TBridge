@@ -9,6 +9,7 @@ import { EventEmitter } from "node:events";
 import os from "node:os";
 import type { SessionInfo } from "@tbridge/protocol";
 import { Session, type SessionOptions } from "./session.js";
+import type { ISession } from "./types.js";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -29,7 +30,7 @@ export interface EngineEvents {
 // ─── Engine ──────────────────────────────────────────────────────
 
 export class ExecutionEngine extends EventEmitter {
-  private readonly sessions = new Map<string, Session>();
+  private readonly sessions = new Map<string, ISession>();
   private readonly defaultOwner: string;
   private readonly defaultDeviceId: string;
 
@@ -56,13 +57,20 @@ export class ExecutionEngine extends EventEmitter {
     return session;
   }
 
+  /** Register an external session (like RemoteSession) */
+  attachSession(session: ISession): void {
+    this.sessions.set(session.id, session);
+    this._bindSession(session);
+    this.emit("session:created", session as any);
+  }
+
   /** Get a session by ID. */
-  getSession(sessionId: string): Session | undefined {
+  getSession(sessionId: string): ISession | undefined {
     return this.sessions.get(sessionId);
   }
 
   /** List all sessions. */
-  listSessions(): Session[] {
+  listSessions(): ISession[] {
     return Array.from(this.sessions.values());
   }
 
@@ -172,7 +180,7 @@ export class ExecutionEngine extends EventEmitter {
 
   // ─── Internal ─────────────────────────────────────────────
 
-  private _bindSession(session: Session): void {
+  private _bindSession(session: ISession): void {
     session.on("data", (data: string) => {
       this.emit("session:data", session.id, data);
     });

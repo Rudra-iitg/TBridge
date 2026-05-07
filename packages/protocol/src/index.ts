@@ -87,6 +87,7 @@ export type Payload =
   // ── Session management ─────────────────────────────────────
   | { kind: "SESSION_LIST_REQUEST" }
   | { kind: "SESSION_LIST"; sessions: SessionInfo[] }
+  | { kind: "SYNC_SESSIONS"; sessions: SessionInfo[] }
   | { kind: "SESSION_CREATE"; shell?: string; title?: string }
   | { kind: "SESSION_CREATED"; session: SessionInfo }
   | { kind: "SESSION_CLOSE"; sessionId: string }

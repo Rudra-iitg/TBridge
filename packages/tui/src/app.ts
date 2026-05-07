@@ -12,7 +12,7 @@
  *   - All other keys forward to the focused terminal pane
  */
 
-import { ExecutionEngine, type Session } from "@tbridge/engine";
+import { ExecutionEngine, type Session, RemoteSession } from "@tbridge/engine";
 import { Screen, type KeyEvent } from "./screen.js";
 import { StatusBar } from "./components/status-bar.js";
 import { Sidebar, type SidebarEntry } from "./components/sidebar.js";
@@ -20,7 +20,9 @@ import { PaneManager } from "./components/pane-manager.js";
 import { CommandBar } from "./components/command-bar.js";
 import { CommandPalette, type PaletteAction } from "./components/command-palette.js";
 import { Toast } from "./components/toast.js";
-
+import { NetworkManager, startEmbeddedRelay, type PeerConnection } from "@tbridge/network";
+import { logger } from "./utils/logger.js";
+import type { Worker } from "node:worker_threads";
 export type AppOptions = {
   userId?: string;
   deviceName?: string;
@@ -36,6 +38,10 @@ export class App {
   readonly commandBar: CommandBar;
   readonly palette: CommandPalette;
   readonly toast: Toast;
+  readonly network: NetworkManager;
+
+  private _relayWorker: Worker | null = null;
+  private _shareCode: string | null = null;
 
   private _shell: string;
   private _userId: string;
@@ -64,6 +70,13 @@ export class App {
     this.palette = new CommandPalette(this.screen);
     this.toast = new Toast(this.screen);
 
+    this.network = new NetworkManager(this._userId, this._deviceName, {
+      shells: [this._shell],
+      canExecute: true,
+      os: process.platform,
+      arch: process.arch,
+    }, "dummy-public-key");
+
     this._registerPaletteActions();
   }
 
@@ -85,15 +98,149 @@ export class App {
       this._updateStatusBar();
     });
 
+    this.engine.on("session:data", (sessionId: string, data: string) => {
+      // Broadcast to all connected peers
+      for (const conn of this.network.connections.values()) {
+        if (conn.status === "encrypted") {
+          conn.send({ kind: "PTY_DATA", sessionId, data });
+        }
+      }
+    });
+
     this.paneManager.setOffset(this.sidebar.width + 1);
     this._fullRedraw();
     this._createLocalSession();
     this.toast.show("Welcome to TBridge v2", "success", 2000);
+
+    // Initialize networking in the background
+    this._initNetwork().catch(err => {
+      logger.error("network_init_failed", err);
+      this.toast.show(`Network error: ${err.message}`, "error", 4000);
+    });
   }
 
   stop(): void {
+    if (this._relayWorker) {
+      this._relayWorker.terminate();
+    }
+    this.network.disconnect();
     this.engine.shutdown().catch(() => {});
     this.screen.stop();
+  }
+
+  private async _initNetwork(): Promise<void> {
+    try {
+      this._relayWorker = await startEmbeddedRelay(8787);
+      
+      this.network.on("status", (status) => {
+        if (status === "connected") {
+          this.toast.show("Network connected", "success", 1500);
+        } else if (status === "disconnected") {
+          this.toast.show("Network disconnected", "warning", 2000);
+        }
+      });
+
+      this.network.on("shareCode", (code) => {
+        this._shareCode = code;
+        this.statusBar.update({ mode: "connected" });
+        this.toast.show(`Your share code: ${code}`, "success", 5000);
+      });
+
+      this.network.on("message", (envelope) => {
+        this.toast.show(`Received message from ${envelope.from.user}: ${envelope.payload.kind}`, "info");
+      });
+
+      this.network.on("pair_request", (identity, code) => {
+        this.toast.show(`Auto-accepting connection from ${identity.user}...`, "info", 2000);
+        const conn = this.network.acceptPairRequest(identity);
+        this._setupHostPeerConnection(conn);
+      });
+
+      this.network.on("connection_established", (conn: PeerConnection) => {
+        logger.info("guest_connection_established", { peer: conn.peerUser });
+        this.toast.show(`Established connection with ${conn.peerUser}...`, "success", 2000);
+        this._setupGuestPeerConnection(conn);
+      });
+
+      this.network.on("error", (err) => {
+        logger.error("network_error", err);
+        this.toast.show(`Network error: ${err.message}`, "error", 3000);
+      });
+
+      await this.network.connect("ws://127.0.0.1:8787");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.toast.show(`Relay error: ${msg}`, "error", 3000);
+    }
+  }
+
+  // ─── Network Peer Connections ───────────────────────────────
+
+  private _setupHostPeerConnection(conn: PeerConnection) {
+    conn.on("ready", () => {
+      logger.info("host_peer_connection_ready", { peer: conn.peerUser });
+      this.toast.show(`Secure channel established with ${conn.peerUser}`, "success", 3000);
+      
+      // Sync sessions to guest
+      const sessions = this.engine.listSessionInfos();
+      conn.send({
+        kind: "SYNC_SESSIONS",
+        sessions
+      });
+    });
+
+    conn.on("payload", (payload) => {
+      if (payload.kind === "PTY_DATA") {
+        this.engine.write(payload.sessionId, payload.data);
+      } else if (payload.kind === "PTY_RESIZE") {
+        this.engine.resize(payload.sessionId, payload.cols, payload.rows);
+      }
+    });
+
+    conn.on("close", () => {
+      logger.info("host_peer_connection_closed", { peer: conn.peerUser });
+      this.toast.show(`Peer ${conn.peerUser} disconnected`, "warning");
+    });
+  }
+
+  private _setupGuestPeerConnection(conn: PeerConnection) {
+    conn.on("ready", () => {
+      logger.info("guest_peer_connection_ready", { peer: conn.peerUser });
+      this.toast.show(`Secure channel established with host`, "success", 3000);
+    });
+
+    conn.on("payload", (payload) => {
+      if (payload.kind === "SYNC_SESSIONS") {
+        // Mount remote sessions
+        for (const info of payload.sessions) {
+          const remoteSession = new RemoteSession(
+            info.owner,
+            info.deviceId,
+            info.shell,
+            info.cols,
+            info.rows,
+            conn,
+            info.id
+          );
+          
+          // Inject into engine so it appears in sidebar/manager
+          this.engine.attachSession(remoteSession);
+          
+          this._paneCounter++;
+          const paneId = `pane-${this._paneCounter}`;
+          this.paneManager.createPane(paneId, remoteSession as any);
+        }
+        
+        this._updateSidebar();
+        this._updateStatusBar();
+        this._fullRedraw();
+      }
+    });
+
+    conn.on("close", () => {
+      logger.info("guest_peer_connection_closed", { peer: conn.peerUser });
+      this.toast.show(`Host disconnected`, "warning");
+    });
   }
 
   // ─── Session Management ───────────────────────────────────
@@ -285,7 +432,10 @@ export class App {
         shortcut: "/connect",
         category: "Network",
         handler: () => {
-          this.toast.show("Networking coming in Phase 4", "info");
+          this.commandBar.enterInput(
+            (code) => this._handleCommand(`connect ${code}`),
+            () => {}
+          );
         },
       },
       {
@@ -540,7 +690,22 @@ export class App {
         break;
 
       case "connect":
-        this.toast.show("Networking coming in Phase 4", "info");
+        if (args.length === 0) {
+          this.toast.show("Usage: /connect <share-code>", "warning");
+        } else {
+          const code = args[0];
+          this.toast.show(`Connecting via code: ${code}...`, "info");
+          this.network.sendToRelay({
+            kind: "PAIR_REQUEST",
+            sessionCode: code,
+            identity: {
+              userId: this._userId,
+              deviceId: this._deviceName,
+              deviceName: this._deviceName,
+              publicKey: "dummy",
+            }
+          });
+        }
         break;
 
       case "msg":
