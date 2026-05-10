@@ -5,13 +5,14 @@ import {
   type SessionCipher,
   type EncryptedChunk
 } from "@tbridge/crypto";
-import type { Payload, Envelope, PeerIdentity } from "@tbridge/protocol";
+import type { Payload, Envelope } from "@tbridge/protocol";
 import type { NetworkManager } from "./network-manager.js";
 
 export class PeerConnection extends EventEmitter {
   private cipher: SessionCipher | null = null;
   private readonly ephemeralKeyPair = generateEphemeralKeyPair();
   private peerPublicKey: Buffer | null = null;
+  private readonly pendingEncrypted: Array<{ ciphertext: string; nonce: string }> = [];
   
   public status: "connecting" | "handshake" | "encrypted" | "disconnected" = "connecting";
 
@@ -19,17 +20,12 @@ export class PeerConnection extends EventEmitter {
     public readonly network: NetworkManager,
     public readonly peerUser: string,
     public readonly peerDevice: string,
-    public readonly role: "host" | "guest",
-    private readonly initialPeerPublicKey?: string // Base64 DER if provided in PAIR_REQUEST
+    public readonly role: "host" | "guest"
   ) {
     super();
 
     // Listen to network manager for messages from this specific peer
     this.network.on("message", this.handleEnvelope);
-
-    if (this.initialPeerPublicKey) {
-      this.peerPublicKey = Buffer.from(this.initialPeerPublicKey, "base64");
-    }
   }
 
   private handleEnvelope = (envelope: Envelope) => {
@@ -47,20 +43,14 @@ export class PeerConnection extends EventEmitter {
 
     if (payload.kind === "ENCRYPTED") {
       if (!this.cipher) {
-        this.emit("error", new Error("Received encrypted payload before handshake completed"));
-        return;
-      }
-      
-      try {
-        const decryptedStr = this.cipher.decrypt({
+        this.pendingEncrypted.push({
           ciphertext: payload.ciphertext,
           nonce: payload.nonce
         });
-        const decryptedPayload = JSON.parse(decryptedStr) as Payload;
-        this.emit("payload", decryptedPayload);
-      } catch (err) {
-        this.emit("error", new Error(`Failed to decrypt payload: ${err}`));
+        return;
       }
+      
+      this.decryptAndEmit(payload);
       return;
     }
 
@@ -80,10 +70,6 @@ export class PeerConnection extends EventEmitter {
       kind: "KEY_EXCHANGE",
       ephemeralPublicKey: pubKeyBase64
     });
-
-    if (this.peerPublicKey) {
-      this.finalizeHandshake(this.peerPublicKey);
-    }
   }
 
   private handleKeyExchange(peerKey: Buffer) {
@@ -98,6 +84,8 @@ export class PeerConnection extends EventEmitter {
   }
 
   private finalizeHandshake(peerKey: Buffer) {
+    if (this.status === "encrypted") return;
+
     try {
       this.cipher = createSessionCipher(
         this.ephemeralKeyPair.privateKey,
@@ -106,6 +94,7 @@ export class PeerConnection extends EventEmitter {
       );
       this.status = "encrypted";
       this.emit("ready");
+      this.flushPendingEncrypted();
     } catch (err) {
       this.status = "disconnected";
       this.emit("error", new Error(`Failed to initialize cipher: ${err}`));
@@ -136,5 +125,24 @@ export class PeerConnection extends EventEmitter {
     this.status = "disconnected";
     this.network.off("message", this.handleEnvelope);
     this.emit("close");
+  }
+
+  private flushPendingEncrypted(): void {
+    while (this.cipher && this.pendingEncrypted.length > 0) {
+      const chunk = this.pendingEncrypted.shift()!;
+      this.decryptAndEmit(chunk);
+    }
+  }
+
+  private decryptAndEmit(chunk: { ciphertext: string; nonce: string }): void {
+    if (!this.cipher) return;
+
+    try {
+      const decryptedStr = this.cipher.decrypt(chunk);
+      const decryptedPayload = JSON.parse(decryptedStr) as Payload;
+      this.emit("payload", decryptedPayload);
+    } catch (err) {
+      this.emit("error", new Error(`Failed to decrypt payload: ${err}`));
+    }
   }
 }

@@ -85,6 +85,7 @@ export class PaneManager {
     // Focus the new pane
     this.focusPane(id);
     this._relayout();
+    this.renderAll();
 
     return pane;
   }

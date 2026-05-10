@@ -28,6 +28,8 @@ export type StatusBarState = {
   peerCount: number;
   activeSessions: number;
   mode: "local" | "connected";
+  shareCode?: string | null;
+  focus?: "terminal" | "sidebar" | "command";
 };
 
 export class StatusBar {
@@ -43,6 +45,8 @@ export class StatusBar {
       peerCount: initialState.peerCount ?? 0,
       activeSessions: initialState.activeSessions ?? 0,
       mode: initialState.mode ?? "local",
+      shareCode: initialState.shareCode ?? null,
+      focus: initialState.focus ?? "terminal",
     };
   }
 
@@ -75,14 +79,18 @@ export class StatusBar {
 
     if (s.peerCount > 0) {
       statusIcon = success(icons.connected);
-      statusText = success(`${s.peerCount} peer${s.peerCount > 1 ? "s" : ""}`);
+      statusText = success(`CONNECTED ${s.peerCount} peer${s.peerCount > 1 ? "s" : ""}`);
+    } else if (s.shareCode) {
+      statusIcon = warning(icons.connecting);
+      statusText = warning(`SHARING ${s.shareCode} · not connected`);
     } else {
       statusIcon = muted(icons.disconnected);
-      statusText = muted("no peers");
+      statusText = muted("OFFLINE · no peers");
     }
 
     const sessions = muted(`${s.activeSessions} session${s.activeSessions !== 1 ? "s" : ""}`);
-    const rightSection = `${statusIcon} ${statusText}  ${muted(icons.dot)}  ${sessions} `;
+    const focus = muted(`focus: ${s.focus ?? "terminal"}`);
+    const rightSection = `${statusIcon} ${statusText}  ${muted(icons.dot)}  ${sessions}  ${muted(icons.dot)}  ${focus} `;
 
     // Compose the line with background
     const bg = `\x1b[48;2;${colors.bgSurface.r};${colors.bgSurface.g};${colors.bgSurface.b}m`;
@@ -90,12 +98,18 @@ export class StatusBar {
 
     // Build: brand + spacer + identity + spacer + right
     const leftPart = `${brand}${version}    ${identity}`;
-    const line = padEnd(`${bg}${leftPart}`, width - 30) + padEnd(rightSection, 30);
 
     this._screen.writeAt(1, 1, `${bg}${padEnd("", width)}${reset}`);
     this._screen.writeAt(1, 1, `${bg}${leftPart}`);
     // Right-align status
-    const rightStart = Math.max(width - 35, 50);
+    const rightStart = Math.max(
+      width - stripAnsi(rightSection).length + 1,
+      stripAnsi(leftPart).length + 3
+    );
     this._screen.writeAt(rightStart, 1, `${bg}${rightSection}${reset}`);
   }
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(/\x1b\[[0-9;]*m/g, "");
 }

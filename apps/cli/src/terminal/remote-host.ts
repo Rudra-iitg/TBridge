@@ -350,6 +350,7 @@ export async function shareTerminal(
           return;
 
         case "SESSION_TERMINATE": {
+          isClosed = true;
           child?.kill();
           process.stderr.write(
             `\r\n  ${dim(icons.dash.repeat(50))}\r\n  ${error(icons.cross)} Session ended: ${message.reason ?? "closed"}\r\n\r\n`
@@ -481,12 +482,14 @@ export async function shareTerminal(
 
     ptyChild.onExit(({ exitCode, signal }) => {
       if (socket.readyState === WebSocket.OPEN) {
+        isClosed = true;
         socket.send(
           encodeMessage({
             type: "PTY_EXIT",
             code: signal === 0 ? exitCode : null
           })
         );
+        socket.close();
       }
     });
 

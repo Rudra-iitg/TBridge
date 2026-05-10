@@ -49,6 +49,7 @@ export class App {
   private _prefixMode = false;
   private _sidebarFocused = false;
   private _paneCounter = 0;
+  private _lastCtrlCAt = 0;
 
   constructor(options: AppOptions = {}) {
     this._shell = options.shell ?? ExecutionEngine.detectShell();
@@ -126,6 +127,7 @@ export class App {
     this.network.disconnect();
     this.engine.shutdown().catch(() => {});
     this.screen.stop();
+    process.exit(0);
   }
 
   private async _initNetwork(): Promise<void> {
@@ -143,23 +145,29 @@ export class App {
       this.network.on("shareCode", (code) => {
         this._shareCode = code;
         this.statusBar.update({ mode: "connected" });
+        this._updateStatusBar();
         this.toast.show(`Your share code: ${code}`, "success", 5000);
       });
 
       this.network.on("message", (envelope) => {
-        this.toast.show(`Received message from ${envelope.from.user}: ${envelope.payload.kind}`, "info");
+        if (envelope.payload.kind === "MESSAGE") {
+          this.toast.show(`Message from ${envelope.from.user}: ${envelope.payload.text}`, "info");
+        }
       });
 
       this.network.on("pair_request", (identity, code) => {
-        this.toast.show(`Auto-accepting connection from ${identity.user}...`, "info", 2000);
+        this.toast.show(`Auto-accepting connection from ${identity.userId}...`, "info", 2000);
         const conn = this.network.acceptPairRequest(identity);
         this._setupHostPeerConnection(conn);
+        conn.startHandshake();
       });
 
       this.network.on("connection_established", (conn: PeerConnection) => {
         logger.info("guest_connection_established", { peer: conn.peerUser });
         this.toast.show(`Established connection with ${conn.peerUser}...`, "success", 2000);
         this._setupGuestPeerConnection(conn);
+        this._updateSidebar();
+        this._updateStatusBar();
       });
 
       this.network.on("error", (err) => {
@@ -180,7 +188,10 @@ export class App {
     conn.on("ready", () => {
       logger.info("host_peer_connection_ready", { peer: conn.peerUser });
       this.toast.show(`Secure channel established with ${conn.peerUser}`, "success", 3000);
-      
+      this._updateStatusBar();
+      this._updateSidebar();
+      this.screen.flush();
+
       // Sync sessions to guest
       const sessions = this.engine.listSessionInfos();
       conn.send({
@@ -200,6 +211,9 @@ export class App {
     conn.on("close", () => {
       logger.info("host_peer_connection_closed", { peer: conn.peerUser });
       this.toast.show(`Peer ${conn.peerUser} disconnected`, "warning");
+      this._updateStatusBar();
+      this._updateSidebar();
+      this.screen.flush();
     });
   }
 
@@ -207,6 +221,9 @@ export class App {
     conn.on("ready", () => {
       logger.info("guest_peer_connection_ready", { peer: conn.peerUser });
       this.toast.show(`Secure channel established with host`, "success", 3000);
+      this._updateStatusBar();
+      this._updateSidebar();
+      this.screen.flush();
     });
 
     conn.on("payload", (payload) => {
@@ -222,6 +239,7 @@ export class App {
             conn,
             info.id
           );
+          remoteSession.title = `REMOTE ${info.owner}:${info.shell.split("/").pop() ?? "shell"}`;
           
           // Inject into engine so it appears in sidebar/manager
           this.engine.attachSession(remoteSession);
@@ -240,6 +258,9 @@ export class App {
     conn.on("close", () => {
       logger.info("guest_peer_connection_closed", { peer: conn.peerUser });
       this.toast.show(`Host disconnected`, "warning");
+      this._updateStatusBar();
+      this._updateSidebar();
+      this.screen.flush();
     });
   }
 
@@ -464,6 +485,11 @@ export class App {
   // ─── Key Handling ─────────────────────────────────────────
 
   private _handleKey(key: KeyEvent): void {
+    if (this._shouldQuitFromKey(key)) {
+      this.stop();
+      return;
+    }
+
     // Command palette takes absolute priority
     if (this.palette.visible) {
       this.palette.handleKey(key);
@@ -473,6 +499,7 @@ export class App {
     // Command bar input mode
     if (this.commandBar.mode === "input") {
       const handled = this.commandBar.handleKey(key.name, key.ch, key.raw);
+      this._updateStatusBar();
       if (handled) return;
     }
 
@@ -501,6 +528,7 @@ export class App {
         (cmd) => this._handleCommand(cmd),
         () => {}
       );
+      this._updateStatusBar();
       return;
     }
 
@@ -510,20 +538,55 @@ export class App {
       if (this._sidebarFocused) {
         this.sidebar.render();
       }
+      this._updateStatusBar();
       return;
     }
 
     // Sidebar navigation
     if (this._sidebarFocused) {
-      this._handleSidebarKey(key);
-      return;
+      const handled = this._handleSidebarKey(key);
+      this._updateStatusBar();
+      if (handled) return;
+
+      this._sidebarFocused = false;
+      this._updateStatusBar();
     }
 
     // Forward to focused pane
     const focused = this.paneManager.focusedPane;
     if (focused) {
       focused.handleInput(key.raw);
+    } else {
+      if (key.name === "ctrl-c") {
+        this.stop();
+      }
     }
+  }
+
+  private _shouldQuitFromKey(key: KeyEvent): boolean {
+    if (key.name === "ctrl-d" || key.name === "ctrl-q" || key.name === "ctrl-x") {
+      return true;
+    }
+
+    if (key.name !== "ctrl-c") return false;
+
+    if (
+      this.palette.visible ||
+      this.commandBar.mode === "input" ||
+      this._sidebarFocused ||
+      !this.paneManager.focusedPane
+    ) {
+      return true;
+    }
+
+    const now = Date.now();
+    if (now - this._lastCtrlCAt < 1200) {
+      return true;
+    }
+
+    this._lastCtrlCAt = now;
+    this.toast.show("Ctrl+C sent to shell. Press Ctrl+C again to quit T-Bridge.", "warning", 1200);
+    return false;
   }
 
   private _handlePrefixKey(key: KeyEvent): void {
@@ -577,16 +640,16 @@ export class App {
     }
   }
 
-  private _handleSidebarKey(key: KeyEvent): void {
+  private _handleSidebarKey(key: KeyEvent): boolean {
     switch (key.name) {
       case "up":
       case "k":
         this.sidebar.selectPrev();
-        break;
+        return true;
       case "down":
       case "j":
         this.sidebar.selectNext();
-        break;
+        return true;
       case "return": {
         const selectedId = this.sidebar.selectedId;
         if (selectedId) {
@@ -598,11 +661,11 @@ export class App {
           }
         }
         this._sidebarFocused = false;
-        break;
+        return true;
       }
       case "escape":
         this._sidebarFocused = false;
-        break;
+        return true;
       case "d":
       case "delete": {
         // Delete selected session from sidebar
@@ -623,17 +686,29 @@ export class App {
             this._fullRedraw();
           }
         }
-        break;
+        return true;
       }
+      default:
+        return false;
     }
   }
 
   // ─── Commands ─────────────────────────────────────────────
 
-  private _handleCommand(input: string): void {
-    const parts = input.split(/\s+/);
-    const cmd = parts[0]?.toLowerCase();
-    const args = parts.slice(1);
+  private _handleCommand(rawInput: string): void {
+    const input = rawInput.trim().replace(/^\//, ''); // Strip leading slash and spaces
+    let cmd = "";
+    let args: string[] = [];
+
+    // Special case for connect without space (e.g. "connect123456")
+    if (input.toLowerCase().startsWith("connect") && input.length > 7 && input[7] !== " ") {
+      cmd = "connect";
+      args = [input.substring(7)];
+    } else {
+      const parts = input.split(/\s+/);
+      cmd = parts[0]?.toLowerCase() || "";
+      args = parts.slice(1);
+    }
 
     switch (cmd) {
       case "new":
@@ -712,10 +787,19 @@ export class App {
         this.toast.show("Messaging coming in Phase 5", "info");
         break;
 
+      case "share":
+        if (this._shareCode) {
+          this.toast.show(`Your share code is: ${this._shareCode}`, "success", 5000);
+          this._updateStatusBar();
+        } else {
+          this.toast.show("Still generating share code...", "warning", 3000);
+        }
+        break;
+
       case "help":
       case "?":
         this.toast.show(
-          "Commands: new, close, split, rename, kill, clear, sessions, sidebar, quit",
+          "Commands: share, connect <code>, new, close, split, rename, clear, sessions, sidebar, quit",
           "info",
           5000
         );
@@ -746,13 +830,27 @@ export class App {
     const entries: SidebarEntry[] = [];
 
     for (const session of this.engine.listSessions()) {
+      const isRemote = session.owner !== this._userId;
       entries.push({
         id: session.id,
         type: "session",
-        label: session.title.split(":").pop() ?? "shell",
-        sublabel: session.shell.split("/").pop() ?? "sh",
+        label: isRemote ? session.title : session.title.split(":").pop() ?? "shell",
+        sublabel: isRemote
+          ? `commands run on @${session.owner}`
+          : session.shell.split("/").pop() ?? "sh",
         status: session.status,
-        isLocal: true,
+        isLocal: !isRemote,
+      });
+    }
+
+    for (const conn of this.network.connections.values()) {
+      entries.push({
+        id: `peer:${conn.peerUser}:${conn.peerDevice}`,
+        type: "peer",
+        label: `@${conn.peerUser}`,
+        sublabel: conn.status === "encrypted" ? conn.peerDevice : conn.status,
+        status: conn.status === "encrypted" ? "online" : "connecting",
+        isLocal: false,
       });
     }
 
@@ -765,8 +863,19 @@ export class App {
   }
 
   private _updateStatusBar(): void {
+    const peerCount = Array.from(this.network.connections.values()).filter(
+      (conn) => conn.status === "encrypted"
+    ).length;
     this.statusBar.update({
       activeSessions: this.engine.activeCount,
+      peerCount: peerCount,
+      shareCode: peerCount > 0 ? null : this._shareCode,
+      focus:
+        this.commandBar.mode === "input"
+          ? "command"
+          : this._sidebarFocused
+            ? "sidebar"
+            : "terminal",
     });
   }
 

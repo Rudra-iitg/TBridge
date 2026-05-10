@@ -75,6 +75,7 @@ export async function connectToShare(
 
   const onInput = (data: Buffer) => {
     if (data.toString("utf8") === EXIT_SEQUENCE) {
+      isClosed = true;
       currentSocket.send(
         encodeMessage({
           type: "SESSION_TERMINATE",
@@ -235,6 +236,7 @@ export async function connectToShare(
           return;
 
         case "PTY_EXIT": {
+          isClosed = true;
           process.stderr.write(
             `\r\n  ${dim(icons.dash.repeat(50))}\r\n  ${dim("Remote shell exited")} ${dim(`(${message.code})`)}\r\n\r\n`
           );
@@ -243,6 +245,7 @@ export async function connectToShare(
         }
 
         case "SESSION_TERMINATE": {
+          isClosed = true;
           process.stderr.write(
             `\r\n  ${dim(icons.dash.repeat(50))}\r\n  ${error(icons.cross)} Session ended: ${message.reason ?? "closed"}\r\n\r\n`
           );

@@ -114,6 +114,44 @@ export type Payload =
 
 export type PayloadKind = Payload["kind"];
 
+// ─── Legacy Relay Protocol ───────────────────────────────────────
+//
+// The old CLI relay still uses direct JSON messages while the v2 TUI/network
+// path uses envelopes. Keep these types explicit so that the relay is checked
+// by TypeScript instead of relying on stale declarations.
+
+export type ClientRole = "host" | "guest";
+
+export type ClientMessage =
+  | { type: "REGISTER_HOST"; code: string; identity: PeerIdentity }
+  | { type: "REGISTER_GUEST"; code: string; identity: PeerIdentity }
+  | { type: "ACCESS_APPROVED" }
+  | { type: "ACCESS_REJECTED"; reason?: string }
+  | { type: "RECONNECT"; sessionId: string; identity: PeerIdentity }
+  | { type: "KEY_EXCHANGE"; ephemeralPublicKey: string }
+  | { type: "ENCRYPTED_DATA"; ciphertext: string; nonce: string }
+  | { type: "PTY_INPUT"; data: string }
+  | { type: "PTY_OUTPUT"; data: string }
+  | { type: "PTY_RESIZE"; cols: number; rows: number }
+  | { type: "PTY_EXIT"; code: number | null }
+  | { type: "SESSION_TERMINATE"; reason?: string };
+
+export type ServerMessage =
+  | { type: "HOST_REGISTERED"; code: string }
+  | { type: "ACCESS_REQUEST"; code: string; requester: PeerIdentity }
+  | { type: "SESSION_READY"; sessionId: string; role: ClientRole }
+  | { type: "SESSION_INFO"; peerIdentity: PeerIdentity }
+  | { type: "RECONNECT_OK"; sessionId: string; role: ClientRole }
+  | { type: "ACCESS_REJECTED"; reason: string }
+  | { type: "KEY_EXCHANGE"; ephemeralPublicKey: string }
+  | { type: "ENCRYPTED_DATA"; ciphertext: string; nonce: string }
+  | { type: "PTY_INPUT"; data: string }
+  | { type: "PTY_OUTPUT"; data: string }
+  | { type: "PTY_RESIZE"; cols: number; rows: number }
+  | { type: "PTY_EXIT"; code: number | null }
+  | { type: "SESSION_TERMINATE"; reason?: string }
+  | { type: "ERROR"; message: string };
+
 let _seqId = 0;
 
 /**
@@ -200,5 +238,9 @@ export const encodeMessage = (msg: Record<string, unknown>): string =>
 export function decodeMessage(data: unknown): Record<string, unknown> {
   const text = typeof data === "string" ? data : data?.toString();
   if (!text) throw new Error("empty message");
-  return JSON.parse(text) as Record<string, unknown>;
+  const parsed = JSON.parse(text) as Record<string, unknown>;
+  if (!parsed || typeof parsed.type !== "string") {
+    throw new Error("invalid message");
+  }
+  return parsed;
 }

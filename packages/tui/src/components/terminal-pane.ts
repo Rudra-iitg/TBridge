@@ -29,6 +29,8 @@ export class TerminalPane {
   private _lines: string[] = [];
   private _scrollOffset = 0;
   private _partialLine = "";
+  private _onSessionData?: (data: string) => void;
+  private _onSessionExit?: () => void;
 
   private get _contentX(): number { return this._x + (this._showBorder ? 1 : 0); }
   private get _contentY(): number { return this._y + (this._showTitle ? 1 : 0) + (this._showBorder ? 1 : 0); }
@@ -57,19 +59,27 @@ export class TerminalPane {
   get session(): Session | null { return this._session; }
 
   attachSession(session: Session): void {
-    if (this._session) this._session.removeAllListeners("data");
+    this.detachSession();
     this._session = session;
     this._lines = [];
     this._scrollOffset = 0;
     this._partialLine = "";
     session.resize(this._contentWidth, this._contentHeight);
-    session.on("data", (data: string) => this._appendData(data));
-    session.on("exit", () => this.render());
+    this._onSessionData = (data: string) => this._appendData(data);
+    this._onSessionExit = () => this.render();
+    session.on("data", this._onSessionData);
+    session.on("exit", this._onSessionExit);
     this.render();
   }
 
   detachSession(): void {
-    if (this._session) { this._session.removeAllListeners("data"); this._session = null; }
+    if (this._session) {
+      if (this._onSessionData) this._session.off("data", this._onSessionData);
+      if (this._onSessionExit) this._session.off("exit", this._onSessionExit);
+      this._session = null;
+    }
+    this._onSessionData = undefined;
+    this._onSessionExit = undefined;
   }
 
   handleInput(data: Buffer): void {
@@ -119,10 +129,31 @@ export class TerminalPane {
       this._screen.writeAt(cx + Math.floor((cw - 17) / 2), cy + Math.floor(ch / 2), msg);
       return;
     }
-    const totalLines = this._lines.length;
+    
+    // Resolve current working line taking \r into account
+    const crParts = sanitizeTerminalText(this._partialLine).split("\r");
+    const currentWorkingLine = crParts[crParts.length - 1] ?? "";
+    
+    const displayLines = this._lines.map(sanitizeTerminalText);
+    if (currentWorkingLine) {
+      displayLines.push(currentWorkingLine);
+    }
+    
+    // Process backspaces roughly so that typing/deleting looks correct
+    for (let i = 0; i < displayLines.length; i++) {
+      let line = displayLines[i] ?? "";
+      // strip backspaces and the character before it
+      while (line.includes("\b")) {
+        // match one char (that is not \b or \x1b) followed by \b
+        line = line.replace(/(?:\x1b\[[0-9;]*[a-zA-Z]|[^\b])\b/, "");
+      }
+      displayLines[i] = line.replace(/\b/g, ""); // remove any leftover leading backspaces
+    }
+
+    const totalLines = displayLines.length;
     const startLine = Math.max(0, totalLines - ch - this._scrollOffset);
     for (let row = 0; row < ch; row++) {
-      const line = this._lines[startLine + row] ?? "";
+      const line = displayLines[startLine + row] ?? "";
       this._screen.writeAt(cx, cy + row, padEnd(line, cw));
     }
   }
@@ -132,10 +163,9 @@ export class TerminalPane {
     const segments = combined.split(/\r?\n/);
     this._partialLine = segments.pop() ?? "";
     for (const segment of segments) {
-      const crParts = segment.split("\r");
+      const crParts = sanitizeTerminalText(segment).split("\r");
       this._lines.push(crParts[crParts.length - 1] ?? "");
     }
-    if (this._partialLine) this._lines.push(this._partialLine);
     if (this._lines.length > 10000) this._lines = this._lines.slice(-10000);
     this._scrollOffset = 0;
     this._renderContent();
@@ -151,4 +181,16 @@ export class TerminalPane {
     this._scrollOffset = Math.max(0, this._scrollOffset - lines);
     this._renderContent(); this._screen.flush();
   }
+}
+
+function sanitizeTerminalText(value: string): string {
+  return value
+    // OSC sequences, including terminal title and shell integration metadata.
+    .replace(/\x1b\][\s\S]*?(?:\x07|\x1b\\)/g, "")
+    // CSI sequences.
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+    // Single-character ESC sequences.
+    .replace(/\x1b[@-Z\\-_]/g, "")
+    // C0 control chars except tab, carriage return, and backspace.
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "");
 }

@@ -236,6 +236,14 @@ export class Screen extends EventEmitter {
   }
 
   private _onInput = (data: Buffer): void => {
+    // Raw mode turns Ctrl+C into a byte instead of SIGINT. Emit it and also
+    // provide an emergency app-level quit fallback even if a component swallows
+    // the key.
+    if (data.length === 1 && data[0] === 0x18) {
+      this.stop();
+      process.exit(0);
+    }
+
     const key = parseKey(data);
     this.emit("key", key);
   };

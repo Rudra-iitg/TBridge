@@ -156,6 +156,7 @@ export class NetworkManager extends EventEmitter {
         // Guest receiving PAIR_ACCEPT from Host
         conn = new PeerConnection(this, envelope.from.user, envelope.from.device, "guest");
         this.connections.set(peerId, conn);
+        this.trackConnection(conn);
         this.emit("connection_established", conn);
       }
       if (conn.status === "connecting") {
@@ -171,19 +172,20 @@ export class NetworkManager extends EventEmitter {
 
   public acceptPairRequest(identity: PeerIdentity) {
     const peerId = `${identity.userId}:${identity.deviceId}`;
-    const connection = new PeerConnection(this, identity.userId, identity.deviceId, "host", identity.publicKey);
+    const connection = new PeerConnection(this, identity.userId, identity.deviceId, "host");
     this.connections.set(peerId, connection);
+    this.trackConnection(connection);
     
     this.sendToPeer(identity.userId, identity.deviceId, {
       kind: "PAIR_ACCEPT"
     });
-    
-    connection.startHandshake();
+
     return connection;
   }
 
   public initiateConnection(peerId: string, connection: PeerConnection) {
     this.connections.set(peerId, connection);
+    this.trackConnection(connection);
   }
 
   public getConnection(userId: string, deviceId: string): PeerConnection | undefined {
@@ -192,5 +194,11 @@ export class NetworkManager extends EventEmitter {
 
   public removeConnection(userId: string, deviceId: string) {
     this.connections.delete(`${userId}:${deviceId}`);
+  }
+
+  private trackConnection(connection: PeerConnection): void {
+    connection.once("close", () => {
+      this.removeConnection(connection.peerUser, connection.peerDevice);
+    });
   }
 }

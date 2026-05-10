@@ -80,6 +80,7 @@ export class CommandBar {
         return true;
 
       case "escape":
+      case "ctrl-c":
         if (this._onCancel) this._onCancel();
         this.exitInput();
         return true;
@@ -140,6 +141,8 @@ export class CommandBar {
         `${primary("Ctrl+B,W")}${muted(" close")}`,
         `${primary("Ctrl+B,←→")}${muted(" switch")}`,
         `${primary("Ctrl+B,Q")}${muted(" quit")}`,
+        `${primary("Ctrl+C×2")}${muted(" quit")}`,
+        `${primary("Ctrl+X")}${muted(" force quit")}`,
       ];
 
       const line = `${bg} ${hints.join(`  ${dim(icons.dot)}  `)} `;
